@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const settingId = searchParams.get('settingId');
+    const limit = parseInt(searchParams.get('limit') || '12', 10);
+    const page = parseInt(searchParams.get('page') || '1', 10);
 
     const uri = process.env.MONGODB_URI;
     const client = new MongoClient(uri);
@@ -21,8 +23,12 @@ export async function GET(request: Request) {
 
             return NextResponse.json(setting);
         } else {
-            const settings = await collection.find({}).toArray();
-            return NextResponse.json(settings);
+            const skip = (page - 1) * limit;
+            const settings = await collection.find({}).skip(skip).limit(limit).toArray();
+            const totalDocuments = await collection.countDocuments();
+            const totalPages = Math.ceil(totalDocuments / limit);
+
+            return NextResponse.json({ settings, totalPages });
         }
     } finally {
         await client.close();

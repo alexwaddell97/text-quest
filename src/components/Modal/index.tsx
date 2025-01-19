@@ -7,9 +7,10 @@ interface ModalProps {
     onClose: () => void;
     children: React.ReactNode;
     title?: string; // Add an optional title prop
+    width?: string; // Add an optional width prop
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen: initialIsOpen, onClose, children, title }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen: initialIsOpen, onClose, children, title, width }) => {
     const { theme } = useTheme();
     const [isOpen, setIsOpen] = useState(initialIsOpen);
 
@@ -26,7 +27,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen: initialIsOpen, onClose, children,
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className={`${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 w-full max-w-md mx-auto relative`}
+                className={`${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 w-full ${width ? width : 'max-w-md'} mx-auto relative`}
             >
                 <button
                     onClick={handleClose}
