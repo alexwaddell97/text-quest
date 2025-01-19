@@ -14,10 +14,15 @@ const ThemeContext = createContext<ThemeContextProps | undefined>(undefined);
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [theme, setTheme] = useState<Theme>(() => {
         // Retrieve the theme from local storage or default to 'light'
-        const storedTheme = localStorage.getItem('theme') as Theme;
-        return storedTheme || 'light';
+        if (typeof window !== 'undefined') {
+            const storedTheme = localStorage.getItem('theme') as Theme;
+            return storedTheme || 'light';
+        }
+        return 'light';
     });
-
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('theme', theme);
+        }
     useEffect(() => {
         // Store the theme in local storage whenever it changes
         localStorage.setItem('theme', theme);

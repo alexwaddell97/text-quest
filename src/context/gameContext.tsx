@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useState, ReactNode, Dispatch, SetStateAction } from 'react';
 import { Character, Setting } from '@/types';
 import { useContext } from 'react';
@@ -10,7 +12,6 @@ interface GameContextType {
     setCharacter: Dispatch<SetStateAction<Character | null>>;
     setSetting: Dispatch<SetStateAction<Setting | null>>;
     setGameId: Dispatch<SetStateAction<string | null>>;
-
 }
 
 // Create a context for the game with a default value
@@ -27,7 +28,11 @@ const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
     const [setting, setSetting] = useState<Setting | null>(null);
     const [gameId, setGameId] = useState<string | null>(() => {
         // Retrieve the initial value from localStorage
-        return localStorage.getItem('gameId');
+        
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('gameId');
+        }
+        return null;
     });
 
     // Update localStorage whenever gameId changes
