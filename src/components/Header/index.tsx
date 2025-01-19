@@ -26,7 +26,7 @@ export default function Header({ onClick }: any) {
                         animate={{ opacity: 1 }}
                         transition={{ duration: 1 }}
                     >
-                        InfiniteWorlds.ai
+                        Roleplaying Realm
                     </motion.h1>
                 </Link>
                 <div className="flex items-center space-x-4">

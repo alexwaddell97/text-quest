@@ -89,7 +89,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         // If no gameId is provided or no session is found, create a new session
         newGameId = new ObjectId().toString();
         const initialMessages = [
-            { role: "system", content: 'This is a setup message. You are connected to a InfiniteWorlds.ai, a website that generates text based adventure games in various settings. When you present options to the user, please wrap these in four asterisks either side like ****Do a thing****. Any text related to the option should be in the asterisks. This will allow the AI to understand the options you are presenting. Add 4 new line spaces between paragraphs.' },
+            { role: "system", content: 'This is a setup message. You are connected to a Roleplaying Realm, a website that generates text based adventure games in various settings. When you present options to the user, please wrap these in four asterisks either side like ****Do a thing****. Any text related to the option should be in the asterisks. This will allow the AI to understand the options you are presenting. Add 4 new line spaces between paragraphs.' },
             { role: "system", content: setting.system_message },
             { role: "system", content: `Genre: ${setting.genre}` },
             { role: "system", content: `Key Themes: ${setting.key_themes.map(theme => `${theme.theme} (${theme.description})`).join(", ")}` },

@@ -1,14 +1,14 @@
-# InfiniteWorlds.ai
+# Roleplaying Realm
 
-InfiniteWorlds.ai is a setting-agnostic, text-based adventure game platform that leverages the power of the GPT API to create immersive and dynamic storytelling experiences.
+Roleplaying Realm is a setting-agnostic, text-based adventure game platform that leverages the power of the GPT API to create immersive and dynamic storytelling experiences.
 
 ## Getting Started
 
 First, clone the repository and install the dependencies:
 
 ```bash
-git clone https://github.com/yourusername/infiniteworlds.ai.git
-cd infiniteworlds.ai
+git clone https://github.com/yourusername/Roleplaying Realm.git
+cd Roleplaying Realm
 npm install
 # or
 yarn install
@@ -28,14 +28,14 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 ## Learn More
 
-To learn more about InfiniteWorlds.ai and how to use it, take a look at the following resources:
+To learn more about Roleplaying Realm and how to use it, take a look at the following resources:
 
-- [InfiniteWorlds.ai Documentation](https://yourdocumentationlink.com) - learn about the platform's features and API.
+- [Roleplaying Realm Documentation](https://yourdocumentationlink.com) - learn about the platform's features and API.
 - [GPT API Documentation](https://beta.openai.com/docs/) - learn about the GPT API used for generating text.
 
 ## Deploy on Vercel
 
-The easiest way to deploy your InfiniteWorlds.ai app is to use the [Vercel Platform](https://vercel.com/new) from the creators of Next.js.
+The easiest way to deploy your Roleplaying Realm app is to use the [Vercel Platform](https://vercel.com/new) from the creators of Next.js.
 
 Check out our [deployment documentation](https://yourdeploymentdocumentationlink.com) for more details.
 

@@ -16,7 +16,7 @@ export default function Footer({ onClick }: any) {
             transition={{ duration: 0.5 }}
         >
             <div className="mx-[20px] flex justify-between items-center">
-                <div className="text-lg font-bold">InfiniteWorlds.ai</div>
+                <div className="text-lg font-bold">Roleplaying Realm</div>
                 <nav className="flex space-x-4">
                     <Link href="/" passHref>
                         <span className="hover:text-gray-600 cursor-pointer">Home</span>
