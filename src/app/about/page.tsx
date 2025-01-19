@@ -20,7 +20,7 @@ export default function Home() {
       >
         <h1 className="text-4xl font-bold mb-4">About Roleplaying Realm</h1>
         <p className="text-lg mb-4">
-          Welcome to Roleplaying Realm, where your imagination meets the power of AI. Our platform generates text-based roleplaying games set in various exciting settings. Whether you're a fan of fantasy, sci-fi, or historical adventures, Roleplaying Realm has something for you.
+          Welcome to Roleplaying Realm, where your imagination meets the power of AI. Our platform generates text-based roleplaying games set in various exciting settings. Whether you&apos;re a fan of fantasy, sci-fi, or historical adventures, Roleplaying Realm has something for you.
         </p>
         <p className="text-lg mb-4">
           Our AI-driven engine crafts unique and engaging stories tailored to your preferences. Dive into a world of endless possibilities and let your creativity run wild. Join us on this journey and become a part of the Roleplaying Realm community.
