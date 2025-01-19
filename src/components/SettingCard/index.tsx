@@ -1,11 +1,15 @@
 import { motion } from "framer-motion";
 import { useTheme } from '@/context'; // Adjust the import path as necessary
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/context/userContext';
 
 export default function SettingCard({ setting, onClick }: any) {
     const { theme } = useTheme();
     const [liked, setLiked] = useState(false);
+    const { user } = useAuth();
+
+    console.log(user)
 
     // Define variants
     const parentVariants = {
@@ -13,9 +17,43 @@ export default function SettingCard({ setting, onClick }: any) {
         animate: { opacity: 1, y: 0 },
     };
 
+    useEffect(() => {
+        if (user && user.votes) {
+            console.log(user.votes)
+            const hasVoted = user.votes.some((vote: any) => vote.setting_id === setting._id);
+            setLiked(hasVoted);
+        }
+    }, []);
+
     const handleLikeClick = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent triggering the onClick of the parent div
         setLiked(!liked);
+
+        // Update the likes count locally
+        if (liked) {
+            setting.votes -= 1;
+        } else {
+            setting.votes += 1;
+        }
+
+        fetch('/api/vote', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id: '60c72b2f5b4a0f001f2e9c70', // Replace with actual user ID
+                setting_id: setting._id,
+                voteType: liked ? 'down' : 'up',
+            }),
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Vote response:', data);
+            })
+            .catch(error => {
+                console.error('Error voting:', error);
+            });
     };
 
     return (
@@ -58,7 +96,7 @@ export default function SettingCard({ setting, onClick }: any) {
                         clipRule="evenodd"
                     />
                 </svg>
-                <span className="text-white mt-1">{setting.likes || liked ? 1 : 0}</span>
+                <span className="text-white mt-1">{setting.votes}</span>
             </motion.div>
             <motion.div
                 className="flex flex-col justify-center items-center text-center h-full w-full pointer-events-auto z-10"

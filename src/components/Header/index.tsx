@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useTheme } from '@/context'; // Adjust the import path as necessary
+import { useTheme } from '@/context';
+import { useSession } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 
 export default function Header({ onClick }: any) {
     const { theme, toggleTheme } = useTheme();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const { data: session, status } = useSession();
+
+    console.log(session)
 
     const toggleMobileMenu = () => {
         setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -58,11 +63,20 @@ export default function Header({ onClick }: any) {
                             ))}
                         </ul>
                     </nav>
-                    <Link href="/login"
-                        className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 hidden md:block`}
-                    >
-                        Login
-                    </Link>
+                    {session ? (
+                        <button
+                            onClick={() => signOut()}
+                            className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 hidden md:block`}
+                        >
+                            Logout
+                        </button>
+                    ) : (
+                        <Link href="/login"
+                            className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 hidden md:block`}
+                        >
+                            Login
+                        </Link>
+                    )}
                     <div className="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
                         <input 
                             type="checkbox" 

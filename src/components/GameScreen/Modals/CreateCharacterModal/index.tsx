@@ -154,7 +154,7 @@ const CreateCharacterModal: React.FC<CreateCharacterModalProps> = ({ onClose }) 
                                 onChange={(e) => setCharacterDescription(e.target.value)}
                                 className={`w-full px-3 py-2 border rounded ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-gray-800'}`}
                             />
-                            <p className="text-sm text-gray-600 mt-1">A detailed description of your character will help influence the story and interactions within the game.</p>
+                            <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>A detailed description of your character will help influence the story and interactions within the game.</p>
                         </div>
                         <div className="mb-4">
                             <label className="block mb-2">Backstory</label>

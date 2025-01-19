@@ -10,7 +10,7 @@ export default function Footer({ onClick }: any) {
 
     return (
         <motion.footer
-            className={`py-6 w-full fixed bottom-0 left-0 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-800'}`}
+            className={`py-6 w-full fixed z-[20] bottom-0 left-0 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-800'}`}
             initial={{ opacity: 1 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}

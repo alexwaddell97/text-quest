@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context";
-
+import { AuthProvider } from "@/context/userContext";
+import Providers from "./providers";
+import { getSession } from "@/auth";
 
 const inter = Inter({ subsets: ["latin"] });
 const poppins = Poppins({  subsets: ['latin'],
@@ -20,13 +22,20 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+  const session = getSession();
+
   return (
     <html lang="en">
       <body className={`${poppins.variable} overflow-x-hidden`}>
         <main className="w-screen h-screen bg-cover bg-center md:pb-0 pb-24 bg-white flex flex-col items-center">
+          <Providers session={session}>
+          <AuthProvider>
           <ThemeProvider>
           {children}
           </ThemeProvider>
+          </AuthProvider>
+          </Providers>
           </main></body>
     </html>
   );

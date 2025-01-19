@@ -45,9 +45,9 @@ export default function About() {
     <div className="flex flex-col min-h-screen w-full">
       <Header />
 
-      <div className={`relative w-full h-full py-4 px-10 md:p-4 overflow-auto ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-black'}`}>
+      <div className={`relative w-full h-full py-4 px-2 md:px-10 md:p-4 overflow-auto ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-black'}`}>
         {loading && (
-          <div className="absolute inset-0 flex justify-center items-center bg-opacity-50 bg-gray-800 z-50">
+          <div className="absolute inset-0 flex justify-center items-center bg-opacity-50 bg-gray-800 z-[15]">
             <div className="spinner-border animate-spin inline-block w-16 h-16 border-8 border-t-8 border-t-indigo-600 rounded-full" role="status">
               <span className="visually-hidden hidden">Loading...</span>
             </div>
@@ -61,34 +61,36 @@ export default function About() {
           </div>
         </AnimatePresence>
 
-        <div className="flex justify-center mt-4 mb-4">
-          <div className="btn-group">
-            <button
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={loading || currentPage === 1}
-              className="btn"
-            >
-              «
-            </button>
-            {[...Array(totalPages)].map((_, pageIndex) => (
-              <button
-                key={pageIndex}
-                onClick={() => handlePageChange(pageIndex + 1)}
-                disabled={loading}
-                className={`btn ${currentPage === pageIndex + 1 ? 'btn-active' : ''}`}
-              >
-                {pageIndex + 1}
-              </button>
-            ))}
-            <button
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={loading || currentPage === totalPages}
-              className="btn"
-            >
-              »
-            </button>
+        {settings.length > 0 && (
+          <div className="flex justify-center mt-4 mb-4">
+            <div className="btn-group space-x-1">
+                <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={loading || currentPage === 1}
+                className={`w-5 ${theme === 'dark' ? 'text-white' : 'text-black'} ${loading || currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''} border-none`}
+                >
+                «
+                </button>
+                {[...Array(totalPages)].map((_, pageIndex) => (
+                <button
+                  key={pageIndex}
+                  onClick={() => handlePageChange(pageIndex + 1)}
+                  disabled={loading}
+                  className={`btn ${currentPage === pageIndex + 1 ? (theme === 'dark' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-indigo-500 hover:bg-indigo-600') : ''} ${theme === 'dark' ? 'bg-gray-600 hover:bg-gray-700 text-white' : 'bg-gray-300 hover:bg-gray-400 text-black'} border-none`}
+                >
+                  {pageIndex + 1}
+                </button>
+                ))}
+                <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={loading || currentPage === totalPages}
+                className={`w-5 ${theme === 'dark' ? 'text-white' : 'text-black'} ${loading || currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''} border-none`}
+                >
+                »
+                </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <Footer />

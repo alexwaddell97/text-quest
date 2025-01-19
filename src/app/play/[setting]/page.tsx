@@ -18,6 +18,7 @@ import { Message, Setting } from "@/types";
 import StartModal from "@/components/GameScreen/Modals/StartModal";
 import { useGameContext } from "@/context/gameContext";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 
 export default function Play() {
@@ -28,6 +29,7 @@ export default function Play() {
     const { theme } = useTheme(); // Use the theme from context
     const searchParams = useSearchParams();
     const gameIdParam = searchParams.get('gameId');
+    const { data: session } = useSession();
 
 
     const params = useParams();
@@ -114,7 +116,7 @@ export default function Play() {
     
     return (
         <div className="flex flex-col w-full h-full">
-            {setting && (
+            {setting && !session && (
                 <StartModal />
             )}
             <div className={`flex-grow w-full h-full p-4 ${theme === 'dark' ? 'bg-gray-600 text-white' : 'bg-white text-gray-800'}`}>
