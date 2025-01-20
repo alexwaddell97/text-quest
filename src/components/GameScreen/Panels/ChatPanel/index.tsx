@@ -34,8 +34,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
     }, [messages]);
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (messages.length && messages[messages.length - 1].sender === 'You') {
+            setIsLoading(true);
+        }
     }, [messages]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isLoading]);
 
     const handleSendWithStart = () => {
         if (!messages.length && gameId) {
@@ -57,6 +63,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                         exit={{ opacity: 0, y: -10 }}
                         className={`message mb-3 p-2 ${theme === 'dark' ? 'bg-gray-700' : 'bg-white'} rounded shadow-sm ${message.sender === "You" ? 'self-start' : 'self-end'} ${message.sender === "You" ? 'mr-auto' : 'ml-auto'}`}
                     >
+                        <div className={`message-sender font-bold text-md ${message.sender === 'You' ? (theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600') : (theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600')}`}>
+                            {message.sender}:
+                        </div>
                         <Markdown>{message.text.replace(/\*\*\*\*([^*]+)\*\*\*\*/g, '').replace(/\n/g, '\n\n\n\n\n\n\n\n')}</Markdown>
                         {message.sender === "Gamemaster" && (
                             <div className="mt-2 flex flex-col items-center">
@@ -82,7 +91,57 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                 ))}
                 {isLoading && (
                     <div className="loading-indicator text-center mt-4">
-                        <span>Loading...</span>
+                        <svg className={`animate-spin h-5 w-5 mx-auto ${theme === 'dark' ? 'text-white' : 'text-indigo-600'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className={`mt-2 ${theme === 'dark' ? 'text-white' : 'text-indigo-600'}`}
+                        >
+                            Generating response
+                            <motion.span
+                                className="animate-pulse"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{
+                                    repeat: Infinity,
+                                    repeatType: "loop",
+                                    duration: 1,
+                                    times: [0, 0.33, 0.66, 1],
+                                }}
+                            >
+                                .
+                            </motion.span>
+                            <motion.span
+                                className="animate-pulse"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{
+                                    repeat: Infinity,
+                                    repeatType: "loop",
+                                    duration: 1,
+                                    times: [0.33, 0.66, 1, 1.33],
+                                }}
+                            >
+                                .
+                            </motion.span>
+                            <motion.span
+                                className="animate-pulse"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{
+                                    repeat: Infinity,
+                                    repeatType: "loop",
+                                    duration: 1,
+                                    times: [0.66, 1, 1.33, 1.66],
+                                }}
+                            >
+                                .
+                            </motion.span>
+                        </motion.div>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
