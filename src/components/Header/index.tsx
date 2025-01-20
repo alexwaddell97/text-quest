@@ -5,7 +5,7 @@ import { useTheme } from '@/context';
 import { useSession } from 'next-auth/react';
 import { signOut } from 'next-auth/react';
 
-export default function Header({ onClick }: any) {
+export default function Header() {
     const { theme, toggleTheme } = useTheme();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { data: session, status } = useSession();
@@ -45,14 +45,22 @@ export default function Header({ onClick }: any) {
                 </Link>
                 <div className="flex items-center space-x-4">
                     <button 
-                        className="md:hidden bg-${theme === 'dark' ? 'gray-700' : 'gray-200'} focus:outline-none"
+                        className={`md:hidden bg-${theme === 'dark' ? 'gray-700' : 'gray-200'} focus:outline-none`}
                         onClick={toggleMobileMenu}
                     >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <svg className="w-6 h-6" fill="none" stroke={theme === 'dark' ? 'white' : 'black'} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path>
                         </svg>
                     </button>
-                    <nav className={`bg-${theme === 'dark' ? 'gray-700' : 'gray-200'} rounded-lg shadow-sm ${isMobileMenuOpen ? 'block' : 'hidden'} md:block`}>
+                    <nav className={`fixed !mx-0 inset-0 bg-${theme === 'dark' ? 'gray-800' : 'gray-100'} bg-opacity-95 z-50 flex flex-col items-center justify-center transition-transform transform ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 md:relative md:bg-transparent md:flex-row md:space-x-4`}>
+                        <button 
+                            className="absolute top-4 right-4 text-white focus:outline-none md:hidden"
+                            onClick={toggleMobileMenu}
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke={theme === 'dark' ? 'white' : 'black'} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
                         <ul className="flex flex-col md:flex-row justify-around p-4 space-y-4 md:space-y-0 md:space-x-4">
                             {['Home', 'About'].map((item, index) => (
                                 <motion.li 
@@ -63,14 +71,29 @@ export default function Header({ onClick }: any) {
                                 >
                                     <Link
                                         href={item === 'Home' ? '/' : `/${item.toLowerCase()}`}
-                                        onClick={onClick}
-                                        className={`text-${theme === 'dark' ? 'white' : 'gray-800'} hover:text-${theme === 'dark' ? 'gray-400' : 'gray-600'} px-3 py-2 rounded-md text-sm font-medium`}
+                                        onClick={() => { toggleMobileMenu(); }}
+                                        className={`text-${theme === 'dark' ? 'white' : 'gray-800'} hover:text-${theme === 'dark' ? 'gray-400' : 'gray-600'} px-3 py-2 rounded-md text-sm font-medium md:bg-${theme === 'dark' ? 'gray-700' : 'gray-300'} md:hover:bg-${theme === 'dark' ? 'gray-600' : 'gray-400'} md:rounded-lg`}
                                     >
                                         {item}
                                     </Link>
                                 </motion.li>
                             ))}
                         </ul>
+                        {session ? (
+                            <button
+                                onClick={() => { signOut(); toggleMobileMenu(); }}
+                                className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 md:hidden`}
+                            >
+                                Logout
+                            </button>
+                        ) : (
+                            <Link href="/login"
+                                className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 md:hidden`}
+                                onClick={toggleMobileMenu}
+                            >
+                                Login
+                            </Link>
+                        )}
                     </nav>
                     {session ? (
                         <button

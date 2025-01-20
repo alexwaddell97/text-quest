@@ -13,10 +13,8 @@ export default function Home() {
   const [playing, setPlaying] = useState(false);
 
   return (
-    <>
-      <Header />
       <motion.div
-        className={`w-full h-full p-10 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-black'}`}
+        className={`w-full h-screen p-10  ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-black'}`}
       >
         <h1 className="text-4xl font-bold mb-4">About Roleplaying Realm</h1>
         <p className="text-lg mb-4">
@@ -29,7 +27,5 @@ export default function Home() {
           At Roleplaying Realm, we leverage the power of GPT-4 and an intricate story-building system to create persistent and dynamic stories in your favorite worlds. Our platform allows you to save your games and continue your adventures at any time. We also welcome user-submitted worlds and settings, making the possibilities truly endless.
         </p>
       </motion.div>
-      <Footer />
-    </>
   );
 }

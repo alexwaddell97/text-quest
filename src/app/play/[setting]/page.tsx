@@ -117,7 +117,7 @@ export default function Play() {
             {setting && !session && (
                 <StartModal />
             )}
-            <div className={`flex-grow w-full h-full p-4 ${theme === 'dark' ? 'bg-gray-600 text-white' : 'bg-white text-gray-800'}`}>
+            <div className={`flex-grow w-full p-4 pb-24 ${theme === 'dark' ? 'bg-gray-600 text-white' : 'bg-white text-gray-800'}`}>
             <div className="flex flex-col md:flex-row h-auto lg:h-[80vh] mx-auto">
                 <div className="flex flex-col w-full md:flex-row gap-4">
                <CharacterPanel />
