@@ -10,14 +10,14 @@ export default function Footer({ onClick }: any) {
 
     return (
         <motion.footer
-            className={`py-6 w-full fixed z-[20] bottom-0 left-0 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-800'}`}
+            className={`py-4 md:py-6 w-full fixed z-[20] bottom-0 left-0 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-800'}`}
             initial={{ opacity: 1 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
         >
-            <div className="mx-[20px] flex justify-between items-center">
+            <div className="mx-4 md:mx-[20px] flex flex-col md:flex-row justify-between items-center space-y-2 md:space-y-0">
                 <div className="text-lg font-bold">Roleplaying Realm</div>
-                <nav className="flex space-x-4">
+                <nav className="flex space-x-2 md:space-x-4">
                     <Link href="/" passHref>
                         <span className="hover:text-gray-600 cursor-pointer">Home</span>
                     </Link>

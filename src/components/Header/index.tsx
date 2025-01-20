@@ -14,6 +14,17 @@ export default function Header({ onClick }: any) {
         setIsMobileMenuOpen(!isMobileMenuOpen);
     };
 
+    const handleThemeToggle = async () => {
+        toggleTheme();
+        await fetch('/api/theme-toggle', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ theme: theme === 'dark' ? 'light' : 'dark', userId: session?.user?.id }),
+        });
+    };
+
     return (
         <motion.div 
             className={`bg-${theme === 'dark' ? 'gray-800' : 'gray-100'} shadow-md w-full top-0 flex justify-between items-center`}
@@ -80,7 +91,7 @@ export default function Header({ onClick }: any) {
                             type="checkbox" 
                             name="toggle" 
                             id="toggle" 
-                            onChange={toggleTheme} 
+                            onChange={handleThemeToggle} 
                             checked={theme === 'dark'} 
                             className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
                         />

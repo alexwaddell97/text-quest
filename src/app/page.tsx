@@ -44,10 +44,12 @@ export default function About() {
   };
 
   const handleGenreChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setLoading(true);
     setSelectedGenre(event.target.value);
   };
 
   const handleSortChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setLoading(true);
     setSelectedSort(event.target.value);
   };
   
@@ -55,7 +57,7 @@ export default function About() {
     <div className="flex flex-col min-h-screen w-full">
       <Header />
 
-      <div className={`relative w-full h-full py-4 px-2 md:px-10 md:p-4 overflow-auto ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-black'}`}>
+      <div className={`relative w-full pb-36 h-full py-4 px-5 md:px-10 md:p-4 overflow-auto ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-black'}`}>
         <div className="flex justify-end gap-5 mb-4">
             <select value={selectedGenre} onChange={handleGenreChange} className={`p-2 border rounded ${theme === 'dark' ? 'bg-gray-800 text-white border-gray-600' : 'bg-white text-black border-gray-300'}`}>
             <option value="">All Genres</option>

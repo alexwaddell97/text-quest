@@ -28,7 +28,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={`${poppins.variable} overflow-x-hidden`}>
-        <main className="w-screen h-screen bg-cover bg-center md:pb-0 pb-24 bg-white flex flex-col items-center">
+        <main className="w-screen h-screen bg-cover bg-center pb-24 bg-white flex flex-col items-center">
           <Providers session={session}>
           <ThemeProvider>
           {children}

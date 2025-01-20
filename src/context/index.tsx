@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
+import { useSession } from 'next-auth/react'; // Assuming you are using next-auth for session management
 
 type Theme = 'dark' | 'light';
 
@@ -12,8 +13,15 @@ interface ThemeContextProps {
 const ThemeContext = createContext<ThemeContextProps | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [theme, setTheme] = useState<Theme>('light');
-     
+    const { data: session } = useSession();
+    const userTheme = session?.user?.settings?.theme as Theme;
+    const [theme, setTheme] = useState<Theme>(userTheme || 'light');
+
+    useEffect(() => {
+        if (userTheme) {
+            setTheme(userTheme);
+        }
+    }, [userTheme]);
 
     const toggleTheme = () => {
         setTheme((prevTheme) => (prevTheme === 'dark' ? 'light' : 'dark'));
