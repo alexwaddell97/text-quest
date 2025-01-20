@@ -34,14 +34,19 @@ export default function Header() {
         >
             <div className="mx-[10px] p-4 w-full flex justify-between items-center">
                 <Link href={'/'}>
-                    <motion.h1 
-                        className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}
+                    <motion.div 
+                        className="flex items-center"
                         initial={{ opacity: 1 }}
                         animate={{ opacity: 1 }}
                         transition={{ duration: 1 }}
                     >
-                        Roleplaying Realm
-                    </motion.h1>
+                        <img src="/logo.svg" alt="Logo" className="h-8 w-8 mr-2" />
+                        <h1 
+                            className={`text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-600`}
+                        >
+                            Roleplaying Realm
+                        </h1>
+                    </motion.div>
                 </Link>
                 <div className="flex items-center space-x-4">
                     <button 

@@ -16,7 +16,7 @@ export default function Home() {
       <motion.div
         className={`w-full h-screen p-10  ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-black'}`}
       >
-        <h1 className="text-4xl font-bold mb-4">About Roleplaying Realm</h1>
+        <h1 className="text-4xl font-bold mb-4">About</h1>
         <p className="text-lg mb-4">
           Welcome to Roleplaying Realm, where your imagination meets the power of AI. Our platform generates text-based roleplaying games set in various exciting settings. Whether you&apos;re a fan of fantasy, sci-fi, or historical adventures, Roleplaying Realm has something for you.
         </p>

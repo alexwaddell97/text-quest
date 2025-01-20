@@ -16,7 +16,10 @@ export default function Footer({ onClick }: any) {
             transition={{ duration: 0.5 }}
         >
             <div className="mx-4 md:mx-[20px] flex flex-col md:flex-row justify-between items-center space-y-2 md:space-y-0">
-                <div className="text-lg font-bold">Roleplaying Realm</div>
+                <div className="flex items-center space-x-2">
+                    <Image src="/logo.svg" alt="Logo" width={24} height={24} />
+                    <div className="text-lg font-bold text-indigo-600">Roleplaying Realm</div>
+                </div>
                 <nav className="flex space-x-2 md:space-x-4">
                     <Link href="/" passHref>
                         <span className="hover:text-gray-600 cursor-pointer">Home</span>
