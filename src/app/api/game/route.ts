@@ -136,6 +136,6 @@ export async function POST(request: Request): Promise<NextResponse> {
         // If no message is provided, return a success response indicating the chat is ready
         // Also pass back all messages in the session that were from assistant and user
         const filteredMessages = session!.messages.filter(msg => msg.role === "assistant" || msg.role === "user");
-        return NextResponse.json({ status: "Chat initialized and ready for messages.", gameId: newGameId, messages: filteredMessages });
+        return NextResponse.json({ status: "Chat initialized and ready for messages.", gameId: newGameId || session._id, messages: filteredMessages });
     }
 }
