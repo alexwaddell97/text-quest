@@ -35,8 +35,6 @@ export default function Play() {
     const params = useParams();
     const settingId = params.setting;
 
-    console.log(character)
-
     useEffect(() => {
         if (gameIdParam)
         {

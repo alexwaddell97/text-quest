@@ -10,8 +10,6 @@ export default function Header({ onClick }: any) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { data: session, status } = useSession();
 
-    console.log(session)
-
     const toggleMobileMenu = () => {
         setIsMobileMenuOpen(!isMobileMenuOpen);
     };

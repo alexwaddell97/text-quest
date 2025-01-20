@@ -2,14 +2,12 @@ import { motion } from "framer-motion";
 import { useTheme } from '@/context'; // Adjust the import path as necessary
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/context/userContext';
+import { useSession } from "next-auth/react";
 
 export default function SettingCard({ setting, onClick }: any) {
     const { theme } = useTheme();
     const [liked, setLiked] = useState(false);
-    const { user } = useAuth();
-
-    console.log(user)
+    const { data: session } = useSession();
 
     // Define variants
     const parentVariants = {
@@ -18,12 +16,11 @@ export default function SettingCard({ setting, onClick }: any) {
     };
 
     useEffect(() => {
-        if (user && user.votes) {
-            console.log(user.votes)
-            const hasVoted = user.votes.some((vote: any) => vote.setting_id === setting._id);
+        if (session?.user && session.user.votes) {
+            const hasVoted = session.user.votes.some((vote: any) => vote === setting._id);
             setLiked(hasVoted);
         }
-    }, []);
+    }, [session, setting._id]);
 
     const handleLikeClick = (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent triggering the onClick of the parent div
@@ -42,7 +39,7 @@ export default function SettingCard({ setting, onClick }: any) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                user_id: '60c72b2f5b4a0f001f2e9c70', // Replace with actual user ID
+                user_id: session?.user?.id, // Replace with actual user ID
                 setting_id: setting._id,
                 voteType: liked ? 'down' : 'up',
             }),
@@ -78,9 +75,9 @@ export default function SettingCard({ setting, onClick }: any) {
             <div className="absolute inset-0 bg-black opacity-40 rounded-lg z-0 pointer-events-none"></div>
             {/* Heart Icon */}
             <motion.div 
-                whileHover={{scale: 1.1}} 
-                className="absolute cursor-pointer top-2 left-2 flex items-center space-x-1 z-[11]"
-                onClick={handleLikeClick}
+                whileHover={{ scale: session ? 1.1 : 1 }} 
+                className={`absolute top-2 left-2 flex items-center space-x-1 z-[11] ${session ? 'cursor-pointer' : ''}`}
+                onClick={session ? handleLikeClick : undefined}
             >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"

@@ -9,8 +9,6 @@ export async function GET(request: Request) {
         model: "gpt-4o",
     });
 
-    console.log(completion.choices[0]);
-
     return NextResponse.json(completion);
 }
 

@@ -46,8 +46,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
         }
     };
 
-    console.log(gameId, messages);
-
     return (
         <div className={`chat-window w-full md:w-1/2 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'} flex flex-col border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'} rounded-lg overflow-hidden mb-4 md:mb-0`}>
             <div className={`messages flex-1 p-4 overflow-y-auto scrollbar-thin ${theme === 'dark' ? 'scrollbar-thumb-gray-700 scrollbar-track-gray-800' : 'scrollbar-thumb-gray-500 scrollbar-track-gray-300'}`}>

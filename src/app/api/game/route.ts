@@ -10,8 +10,6 @@ export async function GET(request: Request) {
         model: "gpt-4o",
     });
 
-    console.log(completion.choices[0]);
-
     return NextResponse.json(completion);
 }
 
@@ -41,6 +39,7 @@ interface Character {
     currency: number;
     stats: { strength: number; agility: number; intelligence: number; charisma: number };
     inventory: { name: string; description: string; rarity: string; quantity: number }[];
+    session_id: ObjectId;
 }
 
 interface ChatRequest {
@@ -80,9 +79,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     let session;
     let newGameId = gameId;
 
-    if (gameId) {
+    if (gameId || character?.session_id) {
         // Retrieve the conversation history for the given gameId
-        session = await sessionsCollection.findOne<{ _id: ObjectId; messages: { role: string; content: string }[], character_id: ObjectId, setting_id: ObjectId }>({ _id: new ObjectId(gameId) });
+        session = await sessionsCollection.findOne<{ _id: ObjectId; messages: { role: string; content: string }[], character_id: ObjectId, setting_id: ObjectId }>({ _id: new ObjectId(gameId || character?.session_id) });
     }
 
     if (!session) {

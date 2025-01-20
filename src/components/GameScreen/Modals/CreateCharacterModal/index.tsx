@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Modal from '@/components/Modal';
 import { useTheme } from '@/context';
 import { useGameContext } from '@/context/gameContext';
+import { useSession } from 'next-auth/react';
 
 interface CreateCharacterModalProps {
     onClose: () => void;
@@ -19,6 +20,7 @@ const CreateCharacterModal: React.FC<CreateCharacterModalProps> = ({ onClose }) 
     const [startingLoot, setStartingLoot] = useState('');
     const [usePointAssign, setUsePointAssign] = useState(false);
     const [pointsLeft, setPointsLeft] = useState(50);
+    const { data: session } = useSession();
 
     const roll4d6DropLowest = () => {
         const rolls = Array.from({ length: 4 }, () => Math.floor(Math.random() * 6) + 1);
@@ -107,7 +109,7 @@ const CreateCharacterModal: React.FC<CreateCharacterModalProps> = ({ onClose }) 
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({character: characterData, settingId: setting?._id}),
+                body: JSON.stringify({character: characterData, settingId: setting?._id, userId: session?.user?.id}),
             });
     
             if (!response.ok) {

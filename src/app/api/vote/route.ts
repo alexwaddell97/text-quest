@@ -37,11 +37,13 @@ export async function POST(request: Request) {
                 { _id: new ObjectId(setting_id) },
                 { $inc: { votes: -1 } }
             );
+
+            console.log('Removing vote:', setting_id, user_id);
             
-            await usersCollection.updateOne(
-                { _id: new ObjectId(user_id) },
-                { $pull: { votes: setting_id } }
-            );
+        await usersCollection.updateOne(
+            { _id: new ObjectId(user_id) },
+            { $pull: { votes: new ObjectId(setting_id) } }
+        );
         }
 
         return NextResponse.json({ message: 'Vote recorded' });
