@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/context";
 import Providers from "./providers";
 import { getSession } from "@/auth";
+import { getServerSession } from "next-auth";
 
 const inter = Inter({ subsets: ["latin"] });
 const poppins = Poppins({  subsets: ['latin'],
@@ -16,13 +17,13 @@ export const metadata: Metadata = {
   description: "A place where you can create your own worlds and stories.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
 
-  const session = getSession();
+  const session = await getSession();
 
   return (
     <html lang="en">
