@@ -3,6 +3,17 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import { useSession } from 'next-auth/react'; // Assuming you are using next-auth for session management
 
+interface UserSettings {
+    theme: Theme;
+}
+
+interface User {
+    settings: UserSettings;
+}
+
+interface Session {
+    user: User;
+}
 type Theme = 'dark' | 'light';
 
 interface ThemeContextProps {
@@ -14,7 +25,7 @@ const ThemeContext = createContext<ThemeContextProps | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { data: session } = useSession();
-    const userTheme = session?.user?.settings?.theme as Theme;
+    const userTheme = (session as Session)?.user?.settings?.theme;
     const [theme, setTheme] = useState<Theme>(userTheme || 'light');
 
     useEffect(() => {
