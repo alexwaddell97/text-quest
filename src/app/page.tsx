@@ -6,7 +6,7 @@ import Button from "@/components/Button";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SettingCard from "@/components/SettingCard";
-import { useTheme } from '@/context'; // Adjust the import path as necessary
+import { useTheme } from '@/context';
 
 export default function About() {
   const { theme } = useTheme();
