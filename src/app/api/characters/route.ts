@@ -43,7 +43,9 @@ export async function GET(request: Request) {
                             name: inventoryItem.name,
                             description: inventoryItem.description,
                             rarity: inventoryItem.rarity,
-                            quantity: item.quantity
+                            quantity: item.quantity,
+                            location_context: inventoryItem.location_context ?? undefined,
+                            usable_at: inventoryItem.usable_at ?? undefined,
                         };
                     }
                     return null;
@@ -53,7 +55,12 @@ export async function GET(request: Request) {
             // Fetch session for the character
             const session = await sessionsCollection.findOne({ character_id: new ObjectId(characterId) });
 
-            return NextResponse.json({ ...character, inventory: inventoryItems.filter(item => item !== null), session_id: session?._id });
+            const doc = JSON.parse(JSON.stringify({
+                ...character,
+                inventory: inventoryItems.filter(item => item !== null),
+                session_id: session?._id ?? null,
+            }));
+            return NextResponse.json(doc);
         } else {
             const characters = await charactersCollection.find(query).toArray();
 
@@ -68,7 +75,9 @@ export async function GET(request: Request) {
                                     name: inventoryItem.name,
                                     description: inventoryItem.description,
                                     rarity: inventoryItem.rarity,
-                                    quantity: item.quantity
+                                    quantity: item.quantity,
+                                    location_context: inventoryItem.location_context ?? undefined,
+                                    usable_at: inventoryItem.usable_at ?? undefined,
                                 };
                             }
                             return null;
@@ -78,11 +87,11 @@ export async function GET(request: Request) {
                     // Fetch session for the character
                     const session = await sessionsCollection.findOne({ character_id: new ObjectId(character._id) });
 
-                    return {
+                    return JSON.parse(JSON.stringify({
                         ...character,
                         inventory: inventoryItems.filter(item => item !== null),
-                        session_id: session?._id
-                    };
+                        session_id: session?._id ?? null,
+                    }));
                 })
             );
 

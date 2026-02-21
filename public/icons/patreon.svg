@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="patreonTitle patreonDesc">
+  <title id="patreonTitle">Patreon mark</title>
+  <desc id="patreonDesc">Minimal Patreon badge that aligns with the Roleplaying Realm palette</desc>
+  <defs>
+    <linearGradient id="patreonGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="55%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#be123c" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0f0f16" />
+  <circle cx="36" cy="28" r="16" fill="url(#patreonGradient)" />
+  <rect x="16" y="16" width="8" height="32" rx="4" fill="#f1f5f9" opacity="0.9" />
+</svg>

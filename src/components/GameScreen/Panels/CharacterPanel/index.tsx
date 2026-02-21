@@ -1,31 +1,97 @@
-import React from 'react';
+import React, { useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import Image from 'next/image';
 import { Character, InventoryItem } from '@/types';
 import { getRarityColor } from '@/utils';
-import { useTheme } from '@/context';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useGameContext } from '@/context/gameContext';
 import CreateCharacterModal from '@/components/GameScreen/Modals/CreateCharacterModal';
 import { useSession } from 'next-auth/react';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { getGuestCharacters, deleteGuestCharacter } from '@/utils/guestCharacters';
+import {
+    Brain,
+    Dumbbell,
+    Feather,
+    Gauge,
+    HeartPulse,
+    LucideIcon,
+    Shield,
+    Sparkles,
+    Star,
+    Eye,
+} from 'lucide-react';
+
+const STAT_ICON_MAP: Record<string, LucideIcon> = {
+    strength: Dumbbell,
+    might: Dumbbell,
+    power: Dumbbell,
+    agility: Feather,
+    dexterity: Feather,
+    finesse: Feather,
+    intelligence: Brain,
+    knowledge: Brain,
+    wisdom: Eye,
+    intuition: Eye,
+    charisma: Sparkles,
+    presence: Sparkles,
+    spirit: Star,
+    resolve: Shield,
+    constitution: Shield,
+    vitality: HeartPulse,
+};
+
+const getStatIcon = (key: string): LucideIcon => {
+    const normalized = key.toLowerCase();
+    return STAT_ICON_MAP[normalized] ?? Gauge;
+};
+
+const formatStatLabel = (label: string) =>
+    label
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
 
 const CharacterPanel: React.FC = () => {
 
-    const { theme } = useTheme();
     const { setting, character, setCharacter } = useGameContext();
+    const activeCharacterId = character?._id;
     const [characters, setCharacters] = useState<Character[]>([]);
     const [showCreateCharacterModal, setShowCreateCharacterModal] = useState(false);
     const [loading, setLoading] = useState(true);
     const { data: session } = useSession();
+    const isAuthenticated = Boolean(session?.user?.id);
+    const hasSelectedSetting = Boolean(setting?._id);
+    const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null);
+    const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+    const [expandedImageName, setExpandedImageName] = useState<string>('');
+    const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+
+    const closeExpanded = useCallback(() => setExpandedImageUrl(null), []);
 
     useEffect(() => {
-        if (!setting?._id || !session?.user?.id) return;
+        const settingId = setting?._id;
+        const userId = session?.user?.id;
 
-        fetchCharacters(setting?._id);
+        if (!settingId) {
+            setLoading(false);
+            return;
+        }
+
+        if (!userId) {
+            // Guest: load from localStorage filtered by setting
+            setCharacters(getGuestCharacters().filter((c) => c.setting_id === settingId));
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        fetchCharacters(settingId, userId);
     }, [setting?._id, session?.user?.id]);
 
-    const fetchCharacters = async (settingId : string | undefined) => {
+    const fetchCharacters = async (settingId: string, userId: string) => {
         try {
-            const response = await fetch(`/api/characters?settingId=${settingId}&userId=${session?.user?.id}`);
+            const response = await fetch(`/api/characters?settingId=${settingId}&userId=${userId}`);
             const data = await response.json();
             setCharacters(data);
             setLoading(false);
@@ -37,184 +103,433 @@ const CharacterPanel: React.FC = () => {
 
     const handleModalClose = () => {
         setShowCreateCharacterModal(false);
-        fetchCharacters(setting?._id);
+        const settingId = setting?._id;
+        if (settingId && session?.user?.id) {
+            fetchCharacters(settingId, session.user.id);
+        } else if (settingId) {
+            // Guest: reload from localStorage
+            setCharacters(getGuestCharacters().filter((c) => c.setting_id === settingId));
+        }
     };
 
-    return (
-       <>
-       {showCreateCharacterModal && <CreateCharacterModal onClose={handleModalClose} />}
+    const renderPanelSkeleton = () => (
+        <div className="flex h-full flex-col gap-5 animate-pulse">
+            <div className="space-y-3">
+                <div className="h-3 w-24 rounded-full bg-white/10" />
+                <div className="h-6 w-3/4 rounded-full bg-white/15" />
+                <div className="h-4 w-1/2 rounded-full bg-white/10" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+                {[1, 2].map((key) => (
+                    <div key={key} className="h-20 rounded-2xl border border-white/10 bg-white/5" />
+                ))}
+            </div>
+            <div className="space-y-3">
+                {[...Array(4)].map((_, idx) => (
+                    <div key={idx} className="h-24 rounded-2xl border border-white/10 bg-white/5" />
+                ))}
+            </div>
+        </div>
+    );
 
-       {character ? (
-         <div className={`w-full md:w-1/4 overflow-auto p-4 ${theme === 'dark' ? 'bg-gray-800 text-white scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800' : 'bg-white text-gray-800 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'} rounded-lg mb-4 md:mb-0`}>
-         <h2 className="text-lg font-bold mb-4">Character Info</h2>
-         <p>Name: {character?.name}</p>
-         <p>Race: {character?.race}</p>
-         <p>Level: {character?.level}</p>
-         <div className="w-full bg-gray-200 rounded-full h-3 mb-4 relative">
-        <div className="bg-blue-600 h-3 rounded-full" style={{ width: `${(character.xp.current / character.xp.max) * 100}%` }}></div>
-         <span className="absolute inset-0 flex items-center justify-center text-xs text-white">{character?.xp?.current}XP ({character?.xp?.max - character?.xp?.current}XP to next level)</span>
-         </div>
-         <p>Health: {character?.health?.current}/{character?.health?.max}</p>
-         <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
-        <div className="bg-red-600 h-3 rounded-full" style={{ width: `${(character.health.current / character.health.max) * 100}%` }}></div>
-         </div>
-
-         <div className={`collapse collapse-arrow border ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'} rounded-box mb-4`}>
-         <input type="checkbox" />
-           <div className="collapse-title text-md font-medium">
-                Description
-            </div>
-            <div className="collapse-content">
-                <p>{character?.description}</p>
-            </div>
-         </div>
-
-         <div className={`collapse collapse-arrow border ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-300 bg-white'} rounded-box mb-4`}>
-         <input type="checkbox" />
-            <div className="collapse-title text-md font-medium">
-                Backstory
-            </div>
-            <div className="collapse-content">
-                <p>{character?.backstory}</p>
-            </div>
-         </div>
-     <h3 className="text-md font-bold my-4">Core Stats</h3>
-    <div className="grid grid-cols-1 gap-4">
-        <div className={`stat-item flex items-center justify-between p-2 rounded-lg shadow-sm ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-        <div className="flex items-center">
-           <img src="/icons/strength.png" alt="Strength Icon" className={`w-6 h-6 mr-4 ${theme === 'dark' ? 'invert' : ''}`} />
-           <p className="">Strength</p>
-        </div>
-        <p className="text-lg font-semibold">{character?.stats?.strength}</p>
-        </div>
-        <div className={`stat-item flex items-center justify-between p-2 rounded-lg shadow-sm ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-        <div className="flex items-center">
-           <img src="/icons/agility.png" alt="Agility Icon" className={`w-6 h-6 mr-4 ${theme === 'dark' ? 'invert' : ''}`} />
-           <p className="">Agility</p>
-        </div>
-        <p className="text-lg font-semibold">{character?.stats?.agility}</p>
-        </div>
-        <div className={`stat-item flex items-center justify-between p-2 rounded-lg shadow-sm ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-        <div className="flex items-center">
-           <img src="/icons/intelligence.png" alt="Intelligence Icon" className={`w-6 h-6 mr-4 ${theme === 'dark' ? 'invert' : ''}`} />
-           <p className="">Intelligence</p>
-        </div>
-        <p className="text-lg font-semibold">{character?.stats?.intelligence}</p>
-        </div>
-        <div className={`stat-item flex items-center justify-between p-2 rounded-lg shadow-sm ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
-           <div className="flex items-center">
-              <img src="/icons/charisma.png" alt="Charisma Icon" className={`w-6 h-6 mr-4 ${theme === 'dark' ? 'invert' : ''}`} />
-              <p className="">Charisma</p>
-           </div>
-           <p className="text-lg font-semibold">{character?.stats?.charisma}</p>
-        </div>
-    </div>
-     <h3 className="text-md font-bold my-4">Inventory</h3>
-         <div className={`max-h-[350px] overflow-y-auto scrollbar-thin ${theme === 'dark' ? 'scrollbar-thumb-gray-600 scrollbar-track-gray-800' : 'scrollbar-thumb-gray-400 scrollbar-track-gray-200'}`}>
-         <ul>
-         {character?.inventory.map((item: InventoryItem, index: number) => (
-             <li key={index} className="mb-2">
-             <div className="flex items-center justify-between">
-                 <div className="flex items-center">
-                     <span className={`${getRarityColor(item.rarity)} font-bold`}>{item.name}</span>
-                     <span className={`ml-2 px-2 py-1 text-xs rounded-full ${item.rarity === 'unique' ? 'bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 text-white' : ''} ${item.rarity === 'common' ? 'bg-gray-500 text-white' : ''} ${item.rarity === 'uncommon' ? 'bg-green-500 text-white' : ''} ${item.rarity === 'rare' ? 'bg-blue-500 text-white' : ''} ${item.rarity === 'legendary' ? 'bg-orange-500 text-white' : ''}`}>
-                     {item.rarity}
-                     </span>
-                 </div>
-                 {item.quantity > 1 && <span className="ml-4 text-sm">x{item.quantity}</span>}
-             </div>
-             <p className='mt-2 text-xs'>{item.description}</p>
-             </li>
-         ))}
-         </ul>
-         </div>
-     </div>
-       ) : (
-        <div className={`w-full md:w-1/4   p-4 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'} border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-300'} rounded-lg mb-4`}>
-            <div className="flex flex-col">
-            <div className="flex justify-between mb-4">
-                <h2 className='font-bold'>Characters</h2>
-                <motion.button 
-                    onClick={() => setShowCreateCharacterModal(true)}
-                    className={`w-8 h-8 flex items-center justify-center ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-800'} rounded-lg cursor-pointer`}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                >
-                    +
-                </motion.button>
-            </div>
-            {loading ? (
-                <div className="flex justify-center items-center h-full">
-                    <div className="spinner-border animate-spin inline-block w-16 h-16 border-8 border-t-8 border-t-indigo-600 rounded-full mb-4" role="status">
-                        <span className="visually-hidden hidden">Loading...</span>
-                    </div>
+    const lightbox = expandedImageUrl
+        ? createPortal(
+            <div
+                className="fixed inset-0 z-[2147483648] flex items-center justify-center bg-black/85 backdrop-blur-md p-6"
+                onClick={closeExpanded}
+                onKeyDown={(e) => e.key === 'Escape' && closeExpanded()}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Character portrait"
+                tabIndex={-1}
+            >
+                <div className="relative max-h-[80vh] max-w-[80vh] w-full">
+                    <Image
+                        unoptimized
+                        src={expandedImageUrl}
+                        alt={expandedImageName || 'Character portrait'}
+                        width={1024}
+                        height={1024}
+                        className="rounded-3xl border border-white/15 object-cover shadow-2xl"
+                    />
+                    <button
+                        onClick={closeExpanded}
+                        className="absolute -right-3 -top-3 flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-black/70 text-white/80 hover:text-white"
+                        aria-label="Close"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
-            ) : (
-                characters.length === 0 ? (
-                    <p className="text-center">No characters found. <br /> Why not create one?</p>
+            </div>,
+            document.body
+        )
+        : null;
+
+    return (
+        <>
+            {lightbox}
+            {showCreateCharacterModal && <CreateCharacterModal onClose={handleModalClose} />}
+            <div className="flex h-[calc(100vh-10rem)] min-h-0 flex-col rounded-[28px] border border-white/10 bg-[rgba(20,20,22,0.96)] p-5 text-white shadow-[0_30px_90px_rgba(5,7,14,0.6)]">
+                {!setting ? (
+                    renderPanelSkeleton()
+                ) : character ? (
+                    <div className="flex min-h-0 flex-col gap-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                {character.image_url && (
+                                    <div
+                                        className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl border border-white/15 cursor-zoom-in"
+                                        onClick={() => { setExpandedImageUrl(character.image_url!); setExpandedImageName(character.name); }}
+                                        title="Click to expand"
+                                    >
+                                        <Image
+                                            unoptimized
+                                            src={character.image_url}
+                                            alt={`${character.name} portrait`}
+                                            width={48}
+                                            height={48}
+                                            className="h-full w-full object-cover object-top"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition hover:bg-black/30 hover:opacity-100">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0zm0 0l4 4" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 8v6M8 11h6" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                )}
+                                <div>
+                                    <p className="text-xs uppercase tracking-[0.35em] text-white/45">Character Sheet</p>
+                                    <h2 className="text-xl font-semibold">{character.name}</h2>
+                                    <p className="text-sm text-white/65">{character.race} · Level {character.level}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setCharacter(null)}
+                                    className="rounded-full border border-white/15 px-4 py-1.5 text-xs font-medium text-white/80 transition hover:border-white/40 hover:text-white"
+                                >
+                                    Switch
+                                </button>
+                                <button
+                                    onClick={() => setShowCreateCharacterModal(true)}
+                                    className="rounded-full border border-white/15 px-4 py-1.5 text-xs font-medium text-white/80 transition hover:border-white/40 hover:text-white"
+                                >
+                                    New
+                                </button>
+                            </div>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="rounded-2xl border border-white/10 bg-white/3 p-4">
+                                <div className="flex items-center justify-between text-xs text-white/60">
+                                    <span>Experience</span>
+                                    <span>
+                                        {character.xp.current} XP · {character.xp.max - character.xp.current} to next level
+                                    </span>
+                                </div>
+                                <div className="mt-2 h-3 rounded-full bg-white/10">
+                                    <div
+                                        className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500"
+                                        style={{ width: `${Math.min(100, Math.round((character.xp.current / Math.max(character.xp.max, 1)) * 100))}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="rounded-2xl border border-white/10 bg-white/3 p-4">
+                                <div className="flex items-center justify-between text-xs text-white/60">
+                                    <span>Health</span>
+                                    <span>
+                                        {character.health.current} / {character.health.max}
+                                    </span>
+                                </div>
+                                <div className="mt-2 h-3 rounded-full bg-white/10">
+                                    <div
+                                        className="h-full rounded-full bg-gradient-to-r from-rose-500 via-orange-500 to-amber-400"
+                                        style={{ width: `${Math.min(100, Math.round((character.health.current / Math.max(character.health.max, 1)) * 100))}%` }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex-1 min-h-0 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-white/5 space-y-5">
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs text-white/55">
+                                    <p className="uppercase tracking-[0.35em] text-white/45">Trait spread</p>
+                                </div>
+                                <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+                                    {character?.stats && Object.keys(character.stats).length ? (
+                                        Object.entries(character.stats).map(([key, value]) => {
+                                            const Icon = getStatIcon(key);
+                                            const displayValue = typeof value === 'number' ? value : value ?? '--';
+                                            return (
+                                                <div
+                                                    key={key}
+                                                    className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/5 via-transparent to-transparent px-4 py-4 text-white shadow-[0_12px_40px_rgba(5,7,14,0.35)]"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="rounded-xl bg-white/10 p-2 text-white">
+                                                                <Icon className="h-4 w-4" aria-hidden />
+                                                            </span>
+                                                            <div>
+                                                                <p className="text-[11px] uppercase tracking-[0.3em] text-white/40">Attribute</p>
+                                                                <p className="text-sm font-semibold">{formatStatLabel(key)}</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-2xl font-bold text-white">{displayValue}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="rounded-2xl border border-dashed border-white/15 bg-white/5 px-4 py-4 text-sm text-white/60">
+                                            Add stats to see a system-agnostic breakdown.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="rounded-2xl border border-white/10 bg-white/3 p-4">
+                                    <p className="text-xs uppercase tracking-[0.35em] text-white/45">Description</p>
+                                    <p className="mt-2 text-sm text-white/70">{character.description}</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/10 bg-white/3 p-4">
+                                    <p className="text-xs uppercase tracking-[0.35em] text-white/45">Backstory</p>
+                                    <p className="mt-2 text-sm text-white/70">{character.backstory}</p>
+                                </div>
+                                <div className="rounded-2xl border border-white/10 bg-white/3 p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <p className="text-xs uppercase tracking-[0.35em] text-white/45">Inventory</p>
+                                        <div className="flex items-center gap-3">
+                                            <span className="flex items-center gap-1 rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10.5c0-1.1.9-2 2.5-2s2.5.9 2.5 2c0 1-.7 1.7-1.5 2l-1 .5c-.8.4-1.5 1.1-1.5 2 0 1.1.9 2 2.5 2s2.5-.9 2.5-2"/></svg>
+                                                {character.currency ?? 0}
+                                            </span>
+                                            <span className="text-[10px] text-white/30">{character.inventory.length} items</span>
+                                        </div>
+                                    </div>
+                                    {character.inventory.length === 0 ? (
+                                        <p className="text-xs text-white/40 italic">Empty pack. Loot awaits.</p>
+                                    ) : (
+                                        <ul className="space-y-1.5">
+                                            {character.inventory.map((item: InventoryItem, index: number) => {
+                                                const rarityDot: Record<string, string> = {
+                                                    unique: 'bg-gradient-to-br from-purple-400 to-pink-500',
+                                                    legendary: 'bg-orange-400',
+                                                    rare: 'bg-blue-400',
+                                                    uncommon: 'bg-emerald-400',
+                                                    common: 'bg-white/40',
+                                                };
+                                                const isSelected = selectedItem?.name === item.name;
+                                                return (
+                                                    <li key={`${item.name}-${index}`}>
+                                                        <button
+                                                            onClick={() => setSelectedItem(isSelected ? null : item)}
+                                                            className={`group w-full flex items-center gap-2.5 rounded-xl border px-3 py-2 transition text-left ${
+                                                                isSelected
+                                                                    ? 'border-white/20 bg-white/8'
+                                                                    : 'border-white/8 bg-black/20 hover:border-white/15 hover:bg-white/5'
+                                                            }`}
+                                                        >
+                                                            <span className={`h-2 w-2 flex-shrink-0 rounded-full ${rarityDot[item.rarity] ?? 'bg-white/30'}`} />
+                                                            <span className={`flex-1 truncate text-xs font-semibold ${getRarityColor(item.rarity)}`}>
+                                                                {item.name}
+                                                            </span>
+                                                            {item.quantity > 1 && (
+                                                                <span className="flex-shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white/60">×{item.quantity}</span>
+                                                            )}
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 flex-shrink-0 text-white/25 transition-transform ${ isSelected ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </button>
+                                                        {isSelected && (
+                                                            <div className="mt-1 rounded-xl border border-white/10 bg-black/30 px-3 py-3 space-y-2.5">
+                                                                {item.description && (
+                                                                    <p className="text-xs text-white/70 leading-relaxed">{item.description}</p>
+                                                                )}
+                                                                {item.location_context && (
+                                                                    <div className="flex items-start gap-2">
+                                                                        <span className="mt-0.5 flex-shrink-0 text-white/30">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                                                        </span>
+                                                                        <p className="text-[11px] text-white/50 leading-snug">{item.location_context}</p>
+                                                                    </div>
+                                                                )}
+                                                                {item.usable_at && (
+                                                                    <div className="flex items-start gap-2">
+                                                                        <span className="mt-0.5 flex-shrink-0 text-amber-400/50">
+                                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                                                        </span>
+                                                                        <p className="text-[11px] text-amber-300/60 leading-snug">{item.usable_at}</p>
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex items-center gap-1.5 pt-0.5">
+                                                                    <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                                                                        item.rarity === 'unique' ? 'bg-purple-400/15 text-purple-300' :
+                                                                        item.rarity === 'legendary' ? 'bg-orange-400/15 text-orange-300' :
+                                                                        item.rarity === 'rare' ? 'bg-blue-400/15 text-blue-300' :
+                                                                        item.rarity === 'uncommon' ? 'bg-emerald-400/15 text-emerald-300' :
+                                                                        'bg-white/10 text-white/40'
+                                                                    }`}>{item.rarity}</span>
+                                                                    {item.quantity > 1 && (
+                                                                        <span className="text-[9px] text-white/30">×{item.quantity} in pack</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 ) : (
-                    characters.map((char, index) => (
-                        <motion.div 
-                            key={index} 
-                            onClick={() => setCharacter(char)}
-                            className={`w-full p-4 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-800'} rounded-lg mb-4 flex flex-col items-center justify-center cursor-pointer relative`}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                        >
-                            <button 
-                                onClick={async (e) => {
-                                    e.stopPropagation();
-                                    await fetch(`/api/characters/delete`, {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                        },
-                                        body: JSON.stringify({ characterId: char._id }),
-                                    });
-                                    fetchCharacters(setting?._id);
-                                }}
-                                className="absolute top-2 right-2 bg-red-600 text-white p-1 rounded-full"
-                            >
-                            <svg
-                                fill="currentColor"
-                                width="16px"
-                                height="16px"
-                                viewBox="0 0 408.483 408.483"
-                                xmlns="http://www.w3.org/2000/svg"
-                            >
-                                <g>
-                                    <g>
-                                        <path d="M87.748,388.784c0.461,11.01,9.521,19.699,20.539,19.699h191.911c11.018,0,20.078-8.689,20.539-19.699l13.705-289.316
-                                            H74.043L87.748,388.784z M247.655,171.329c0-4.61,3.738-8.349,8.35-8.349h13.355c4.609,0,8.35,3.738,8.35,8.349v165.293
-                                            c0,4.611-3.738,8.349-8.35,8.349h-13.355c-4.61,0-8.35-3.736-8.35-8.349V171.329z M189.216,171.329
-                                            c0-4.61,3.738-8.349,8.349-8.349h13.355c4.609,0,8.349,3.738,8.349,8.349v165.293c0,4.611-3.737,8.349-8.349,8.349h-13.355
-                                            c-4.61,0-8.349-3.736-8.349-8.349V171.329L189.216,171.329z M130.775,171.329c0-4.61,3.738-8.349,8.349-8.349h13.356
-                                            c4.61,0,8.349,3.738,8.349,8.349v165.293c0,4.611-3.738,8.349-8.349,8.349h-13.356c-4.61,0-8.349-3.736-8.349-8.349V171.329z"/>
-                                        <path d="M343.567,21.043h-88.535V4.305c0-2.377-1.927-4.305-4.305-4.305h-92.971c-2.377,0-4.304,1.928-4.304,4.305v16.737H64.916
-                                            c-7.125,0-12.9,5.776-12.9,12.901V74.47h304.451V33.944C356.467,26.819,350.692,21.043,343.567,21.043z"/>
-                                    </g>
-                                </g>
-                            </svg>
-                            </button>
-                            <h2 className="text-lg font-bold mb-2">{char.name}</h2>
-                            <p>Race: {char.race}</p>
-                            <p>Level: {char.level}</p>
-                            <div className="w-full bg-gray-200 rounded-full h-3 mb-2 relative">
-                                <div className="bg-blue-600 h-3 rounded-full" style={{ width: `${(char.xp.current / char.xp.max) * 100}%` }}></div>
-                                <span className="absolute inset-0 flex items-center justify-center text-xs text-white">{char.xp.current}XP ({char.xp.max - char.xp.current}XP to next level)</span>
+                    <div className="flex h-full flex-col">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs uppercase tracking-[0.35em] text-white/45">Characters</p>
+                                <h2 className="text-xl font-semibold">Choose your hero</h2>
                             </div>
-                            <p>Health: {char.health.current}/{char.health.max}</p>
-                            <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
-                                <div className="bg-red-600 h-3 rounded-full" style={{ width: `${(char.health.current / char.health.max) * 100}%` }}></div>
-                            </div>
-                        </motion.div>
-                    ))
-                )
-            )}
+                            <motion.button
+                                onClick={() => setShowCreateCharacterModal(true)}
+                                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-white"
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                            >
+                                +
+                            </motion.button>
+                        </div>
+                        <div className="mt-5 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-white/5">
+                            {!hasSelectedSetting ? (
+                                <p className="text-sm text-white/60">Choose a world to load relevant characters.</p>
+                            ) : loading ? (
+                                <div className="flex h-full items-center justify-center">
+                                    <div className="h-12 w-12 animate-spin rounded-full border-2 border-white/20 border-t-rose-400" />
+                                </div>
+                            ) : characters.length === 0 ? (
+                                <p className="text-sm text-white/60">No characters yet. Create one to get tailored prompts.</p>
+                            ) : (
+                                characters.map((char, index) => (
+                                    <motion.div
+                                        key={index}
+                                        onClick={() => setCharacter(char)}
+                                        className="group relative mb-4 rounded-2xl border border-white/10 bg-white/3 p-4 text-left text-white transition hover:border-white/40"
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                    >
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (deletingCharacterId) {
+                                                    return;
+                                                }
+                                                const charId = char._id;
+                                                const wasActive = activeCharacterId === charId;
+                                                setDeletingCharacterId(charId);
+                                                let wasActiveChar = false;
+                                                try {
+                                                    if (!session?.user?.id) {
+                                                        // Guest: delete from localStorage
+                                                        deleteGuestCharacter(charId);
+                                                        const settingId = setting?._id;
+                                                        if (settingId) {
+                                                            setCharacters(getGuestCharacters().filter((c) => c.setting_id === settingId));
+                                                        }
+                                                    } else {
+                                                        const response = await fetch(`/api/characters/delete`, {
+                                                            method: 'POST',
+                                                            headers: {
+                                                                'Content-Type': 'application/json',
+                                                            },
+                                                            body: JSON.stringify({ characterId: charId }),
+                                                        });
+                                                        if (!response.ok) {
+                                                            throw new Error('Failed to delete character');
+                                                        }
+                                                        if (setting?._id && session?.user?.id) {
+                                                            fetchCharacters(setting._id, session.user.id);
+                                                        }
+                                                    }
+                                                    wasActiveChar = wasActive;
+                                                } catch (error) {
+                                                    console.error('Error deleting character:', error);
+                                                } finally {
+                                                    setDeletingCharacterId(null);
+                                                    if (wasActiveChar) {
+                                                        setCharacter(null);
+                                                    }
+                                                }
+                                            }}
+                                            disabled={deletingCharacterId === char._id}
+                                            className={`absolute right-3 top-3 rounded-full border p-1 transition ${
+                                                deletingCharacterId === char._id
+                                                    ? 'cursor-wait border-white/15 bg-white/5 text-white/50'
+                                                    : 'border-white/20 bg-white/10 text-white/70 hover:border-red-400/60 hover:text-red-200'
+                                            }`}
+                                            aria-label="Delete character"
+                                        >
+                                            {deletingCharacterId === char._id ? (
+                                                <LoadingSpinner size={12} className="text-white" label="Deleting character" />
+                                            ) : (
+                                                <svg
+                                                    viewBox="0 0 24 24"
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    className="h-3.5 w-3.5"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                >
+                                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                                    <line x1="6" y1="18" x2="18" y2="6" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                        <div className="flex items-center gap-3 mb-1">
+                                            {char.image_url && (
+                                                <div
+                                                    className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-lg border border-white/15 cursor-zoom-in"
+                                                    onClick={(e) => { e.stopPropagation(); setExpandedImageUrl(char.image_url!); setExpandedImageName(char.name); }}
+                                                    title="Click to expand"
+                                                >
+                                                    <Image
+                                                        unoptimized
+                                                        src={char.image_url}
+                                                        alt={`${char.name} portrait`}
+                                                        width={36}
+                                                        height={36}
+                                                        className="h-full w-full object-cover object-top"
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition hover:bg-black/30 hover:opacity-100">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0zm0 0l4 4" />
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 8v6M8 11h6" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <h3 className="text-lg font-semibold">{char.name}</h3>
+                                        </div>
+                                        <p className="text-sm text-white/70">{char.race} · Level {char.level}</p>
+                                        <div className="mt-3 h-2 rounded-full bg-white/10">
+                                            <div
+                                                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400"
+                                                style={{ width: `${Math.min(100, Math.round((char.xp.current / Math.max(char.xp.max, 1)) * 100))}%` }}
+                                            />
+                                        </div>
+                                        <p className="mt-1 text-xs text-white/60">{char.xp.current} XP · {char.xp.max - char.xp.current} to next</p>
+                                    </motion.div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
-       )}
-       </>
+        </>
     );
 };
 

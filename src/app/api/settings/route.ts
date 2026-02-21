@@ -23,7 +23,7 @@ export async function GET(request: Request) {
                 return NextResponse.json({ error: 'Setting not found' }, { status: 404 });
             }
 
-            return NextResponse.json(setting);
+            return NextResponse.json(JSON.parse(JSON.stringify(setting)));
         } else {
             const query: any = {};
             if (genre) {
@@ -41,11 +41,12 @@ export async function GET(request: Request) {
 
             const settings = await collection.find(query).sort(sortOption).skip(skip).limit(limit).toArray();
             const totalDocuments = await collection.countDocuments(query);
-            const totalPages = Math.ceil(totalDocuments / limit);
+            const totalPages = Math.ceil(totalDocuments / limit) || 0;
+            const hasMore = (page * limit) < totalDocuments;
 
             const genres = await collection.distinct('genre');
 
-            return NextResponse.json({ settings, totalPages, genres });
+            return NextResponse.json(JSON.parse(JSON.stringify({ settings, totalPages, genres, hasMore })));
         }
     } finally {
         await client.close();

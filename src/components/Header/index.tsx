@@ -1,144 +1,165 @@
-import React, { useState } from 'react';
+"use client";
+
+import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useTheme } from '@/context';
-import { useSession } from 'next-auth/react';
-import { signOut } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 
 export default function Header() {
-    const { theme, toggleTheme } = useTheme();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const { data: session, status } = useSession();
+    const { data: session } = useSession();
 
-    const toggleMobileMenu = () => {
-        setIsMobileMenuOpen(!isMobileMenuOpen);
-    };
+    const pathname = usePathname();
 
-    const handleThemeToggle = async () => {
-        toggleTheme();
-        await fetch('/api/theme-toggle', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ theme: theme === 'dark' ? 'light' : 'dark', userId: session?.user?.id }),
-        });
-    };
+    const navLinks = useMemo(
+        () => [
+            { label: 'Worlds', href: '/' },
+            { label: 'How it Works', href: '/how-it-works' },
+        ],
+        []
+    );
+
+    const toggleMobileMenu = () => setIsMobileMenuOpen((prev) => !prev);
 
     return (
-        <motion.div 
-            className={`bg-${theme === 'dark' ? 'gray-800' : 'gray-100'} shadow-md w-full top-0 flex justify-between items-center`}
-            initial={{ y: 0 }}
-            animate={{ y: 0 }}
-            transition={{ type: 'spring', stiffness: 50 }}
+        <motion.header
+            className="relative sticky top-0 z-40 w-full border-b border-white/10 bg-[rgba(6,7,13,0.92)]/80 backdrop-blur-2xl shadow-[0_12px_40px_rgba(4,5,8,0.55)]"
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 120, damping: 22 }}
         >
-            <div className="mx-[10px] p-4 w-full flex justify-between items-center">
-                <Link href={'/'}>
-                    <motion.div 
-                        className="flex items-center"
-                        initial={{ opacity: 1 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 1 }}
-                    >
-                        <img src="/logo.svg" alt="Logo" className="h-8 w-8 mr-2" />
-                        <h1 
-                            className={`text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-indigo-600 to-indigo-600`}
-                        >
-                            Roleplaying Realm
-                        </h1>
+            <div className="pointer-events-none absolute inset-x-0 -top-24 mx-auto h-28 w-2/3 rounded-full bg-gradient-to-r from-rose-500/25 via-amber-200/15 to-red-800/20 blur-3xl" aria-hidden />
+
+            <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-4">
+                <Link href="/">
+                    <motion.div className="flex items-center gap-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <img src="/logo.svg" alt="Roleplaying Realm logo" className="h-10 w-10" />
+                        <div>
+                            <p className="text-[11px] uppercase tracking-[0.45em] text-white/50">Interactive GM</p>
+                            <h1 className="text-lg font-semibold text-white">Roleplaying Realm</h1>
+                        </div>
                     </motion.div>
                 </Link>
-                <div className="flex items-center space-x-4">
-                    <button 
-                        className={`md:hidden bg-${theme === 'dark' ? 'gray-700' : 'gray-200'} focus:outline-none`}
-                        onClick={toggleMobileMenu}
-                    >
-                        <svg className="w-6 h-6" fill="none" stroke={theme === 'dark' ? 'white' : 'black'} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7"></path>
-                        </svg>
-                    </button>
-                    <nav className={`fixed !mx-0 inset-0 bg-${theme === 'dark' ? 'gray-800' : 'gray-100'} bg-opacity-95 z-50 flex flex-col items-center justify-center transition-transform transform ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 md:relative md:bg-transparent md:flex-row md:space-x-4`}>
-                        <button 
-                            className="absolute top-4 right-4 text-white focus:outline-none md:hidden"
-                            onClick={toggleMobileMenu}
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke={theme === 'dark' ? 'white' : 'black'} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                        </button>
-                        <ul className="flex flex-col md:flex-row justify-around p-4 space-y-4 md:space-y-0 md:space-x-4">
-                            {['Home', 'About'].map((item, index) => (
-                                <motion.li 
-                                    key={item}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    className="transition duration-300 ease-in-out transform hover:scale-105"
+
+                <div className="hidden md:flex items-center gap-6">
+                    <nav className="relative flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 backdrop-blur">
+                        {navLinks.map((link) => {
+                            const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+                            return (
+                                <Link
+                                    key={link.href}
+                                    href={link.href}
+                                    aria-current={isActive ? 'page' : undefined}
+                                    className={`relative px-4 py-2 text-sm font-medium transition ${isActive ? 'text-white' : 'text-white/60 hover:text-white'}`}
                                 >
-                                    <Link
-                                        href={item === 'Home' ? '/' : `/${item.toLowerCase()}`}
-                                        onClick={() => { toggleMobileMenu(); }}
-                                        className={`text-${theme === 'dark' ? 'white' : 'gray-800'} hover:text-${theme === 'dark' ? 'gray-400' : 'gray-600'} px-3 py-2 rounded-md text-sm font-medium md:bg-${theme === 'dark' ? 'gray-700' : 'gray-300'} md:hover:bg-${theme === 'dark' ? 'gray-600' : 'gray-400'} md:rounded-lg`}
-                                    >
-                                        {item}
-                                    </Link>
-                                </motion.li>
-                            ))}
-                        </ul>
+                                    {isActive && (
+                                        <motion.span
+                                            layoutId="navActiveBg"
+                                            className="absolute inset-[2px] rounded-full bg-gradient-to-r from-rose-400 via-amber-500 to-red-700 shadow-[0_10px_35px_rgba(255,82,82,0.35)]"
+                                            transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+                                        />
+                                    )}
+                                    <span className="relative z-[1]">{link.label}</span>
+                                </Link>
+                            );
+                        })}
+                    </nav>
+                    <div className="flex items-center gap-3">
+                        <Link
+                            href="/play/default"
+                            className="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white/80 transition hover:border-white/40 hover:text-white"
+                        >
+                            Explore Worlds
+                        </Link>
                         {session ? (
                             <button
-                                onClick={() => { signOut(); toggleMobileMenu(); }}
-                                className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 md:hidden`}
+                                onClick={() => signOut()}
+                                className="rounded-full bg-gradient-to-r from-rose-400 via-amber-600 to-red-800 px-5 py-2 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(233,76,76,0.35)]"
                             >
                                 Logout
                             </button>
                         ) : (
-                            <Link href="/login"
-                                className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 md:hidden`}
-                                onClick={toggleMobileMenu}
+                            <Link
+                                href="/login"
+                                className="rounded-full bg-gradient-to-r from-rose-400 via-amber-600 to-red-800 px-5 py-2 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(233,76,76,0.35)]"
                             >
                                 Login
                             </Link>
                         )}
-                    </nav>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3 md:hidden">
+                    <button
+                        className="rounded-full border border-white/20 bg-white/10 p-2"
+                        onClick={toggleMobileMenu}
+                        aria-label="Toggle navigation"
+                    >
+                        <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <nav
+                className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[rgba(4,5,10,0.96)] px-6 py-10 transition-transform duration-300 ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} md:hidden`}
+            >
+                <div className="pointer-events-none absolute inset-x-0 top-12 mx-auto h-40 w-40 rounded-full bg-gradient-to-r from-rose-500/30 via-amber-400/20 to-red-800/25 blur-[120px]" aria-hidden />
+                <button className="absolute top-5 right-5 text-white/80" onClick={toggleMobileMenu} aria-label="Close navigation">
+                    <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+                <ul className="flex flex-col items-center gap-6 text-lg">
+                    {navLinks.map((link) => {
+                        const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+                        return (
+                            <motion.li key={link.href} whileHover={{ scale: 1.05 }}>
+                                <Link
+                                    href={link.href}
+                                    onClick={() => toggleMobileMenu()}
+                                    aria-current={isActive ? 'page' : undefined}
+                                    className={`px-6 py-2 rounded-full border ${isActive ? 'border-transparent bg-gradient-to-r from-rose-400/70 via-amber-500/70 to-red-700/70 text-white shadow-[0_12px_40px_rgba(233,76,76,0.25)]' : 'border-white/15 text-white/85'}`}
+                                >
+                                    {link.label}
+                                </Link>
+                            </motion.li>
+                        );
+                    })}
+                </ul>
+                <div className="mt-10 flex w-full max-w-sm flex-col gap-3">
+                    <Link
+                        href="/play/default"
+                        onClick={() => toggleMobileMenu()}
+                        className="w-full rounded-full border border-white/20 px-5 py-3 text-center text-white/85"
+                    >
+                        Explore Worlds
+                    </Link>
                     {session ? (
                         <button
-                            onClick={() => signOut()}
-                            className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 hidden md:block`}
+                            onClick={() => {
+                                signOut();
+                                toggleMobileMenu();
+                            }}
+                            className="w-full rounded-full bg-gradient-to-r from-rose-400 via-amber-600 to-red-800 px-5 py-3 text-white font-semibold"
                         >
                             Logout
                         </button>
                     ) : (
-                        <Link href="/login"
-                            className={`bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105 hidden md:block`}
+                        <Link
+                            href="/login"
+                            onClick={() => toggleMobileMenu()}
+                            className="w-full rounded-full bg-gradient-to-r from-rose-400 via-amber-600 to-red-800 px-5 py-3 text-center text-white font-semibold"
                         >
                             Login
                         </Link>
                     )}
-                    <div className="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
-                        <input 
-                            type="checkbox" 
-                            name="toggle" 
-                            id="toggle" 
-                            onChange={handleThemeToggle} 
-                            checked={theme === 'dark'} 
-                            className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
-                        />
-                        <label 
-                            htmlFor="toggle" 
-                            className={`toggle-label block overflow-hidden h-6 rounded-full bg-${theme === 'dark' ? 'gray-600' : 'gray-200'} cursor-pointer`}
-                        ></label>
-                    </div>
-                    <style jsx>{`
-                        .toggle-checkbox:checked {
-                            right: 0;
-                            border-color: #4f46e5;
-                        }
-                        .toggle-checkbox:checked + .toggle-label {
-                            background-color: #4f46e5;
-                        }
-                    `}</style>
                 </div>
-            </div>
-        </motion.div>
+            </nav>
+
+            <div className="hidden" />
+        </motion.header>
     );
 }

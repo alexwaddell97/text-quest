@@ -1,19 +1,11 @@
-"use client";
+import React from "react";
+import { GameProvider } from "@/context/gameContext";
 
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import React from 'react';
-import { GameProvider } from '@/context/gameContext';
-
-const Layout: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
+const Layout = ({ children }: React.PropsWithChildren) => {
     return (
-        <>
-        <Header />
-        <GameProvider>
-       {children}
-       </GameProvider>
-        <Footer />
-        </>
+        <div data-full-width="true" data-immersive="true">
+            <GameProvider>{children}</GameProvider>
+        </div>
     );
 };
 

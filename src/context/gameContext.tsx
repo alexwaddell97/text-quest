@@ -1,6 +1,7 @@
-import React, { createContext, useState, ReactNode, Dispatch, SetStateAction } from 'react';
+"use client";
+
+import React, { createContext, useState, ReactNode, Dispatch, SetStateAction, useContext } from 'react';
 import { Character, Setting } from '@/types';
-import { useContext } from 'react';
 
 // Define the shape of the game context
 interface GameContextType {

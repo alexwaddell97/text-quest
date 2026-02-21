@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { useTheme } from '@/context'; // Adjust the import path as necessary
 
 interface ModalProps {
     isOpen: boolean;
@@ -11,27 +11,46 @@ interface ModalProps {
 }
 
 const Modal: React.FC<ModalProps> = ({ isOpen: initialIsOpen, onClose, children, title, width }) => {
-    const { theme } = useTheme();
     const [isOpen, setIsOpen] = useState(initialIsOpen);
+    const [hasMounted, setHasMounted] = useState(false);
+
+    useEffect(() => {
+        setHasMounted(true);
+    }, []);
+
+    useEffect(() => {
+        setIsOpen(initialIsOpen);
+    }, [initialIsOpen]);
 
     const handleClose = () => {
         setIsOpen(false);
         onClose();
     };
 
-    if (!isOpen) return null;
+    useEffect(() => {
+        if (!hasMounted) {
+            return;
+        }
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = isOpen ? 'hidden' : previousOverflow;
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [hasMounted, isOpen]);
 
-    return (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center ${theme === 'dark' ? 'bg-gray-900 bg-opacity-75' : 'bg-gray-100 bg-opacity-75'}`}>
+    if (!hasMounted || !isOpen) return null;
+
+    return createPortal(
+        <div className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/80 backdrop-blur-lg p-4 sm:p-8" role="dialog" aria-modal="true">
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className={`${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-lg p-6 w-full ${width ? width : 'max-w-md'} mx-auto relative`}
+                className={`relative mx-auto flex h-auto w-full max-h-[calc(100vh-2rem)] flex-col overflow-y-auto rounded-3xl border border-white/10 bg-gradient-to-b from-[#1f1f23] via-[#131316] to-[#050507] p-6 text-gray-100 shadow-2xl ${width ? width : 'max-w-lg'}`}
             >
                 <button
                     onClick={handleClose}
-                    className={`absolute top-0 right-0 mt-4 mr-4 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}
+                    className="absolute top-4 right-4 text-white/70 hover:text-white"
                 >
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -46,10 +65,11 @@ const Modal: React.FC<ModalProps> = ({ isOpen: initialIsOpen, onClose, children,
                     />
                 </svg>
                 </button>
-                {title && <h2 className={`text-lg font-semibold mb-4 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-800'}`}>{title}</h2>}
+                {title && <h2 className="text-lg font-semibold mb-4 text-white">{title}</h2>}
                 {children}
             </motion.div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

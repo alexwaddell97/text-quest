@@ -1,6 +1,6 @@
 {
-  "name": "text-quest",
-  "version": "0.1.0",
+  "name": "roleplaying-realm",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,11 +9,14 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@vercel/blob": "^2.3.0",
     "dotenv": "^16.4.7",
     "framer-motion": "^11.0.5",
+    "lucide-react": "^0.575.0",
     "marked": "^15.0.6",
     "marked-react": "^3.0.0",
     "mongodb": "^6.12.0",
+    "motion": "^12.34.2",
     "next": "14.1.0",
     "next-auth": "^4.24.11",
     "openai": "^4.28.0",

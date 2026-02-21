@@ -1,35 +1,55 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Modal from '@/components/Modal';
 import Link from 'next/link';
-import { useTheme } from '@/context';
-import { Setting } from '@/types';
 import { useGameContext } from '@/context/gameContext';
 
 
 const StartModal: React.FC = () => {
-   
-    const { theme } = useTheme();
     const { setting } = useGameContext();
+    const [dismissed, setDismissed] = useState(false);
 
+    if (dismissed) return null;
 
     return (
-        <Modal isOpen={true} onClose={() => {}}>
-        <div className={`p-4 ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-800'}`}>
-        <h2 className="text-xl font-bold mb-4">Notice</h2>
-        <p className="mb-4">You are about to start playing in the <strong>{setting?.name}</strong> setting. However, you are not logged in, so your characters and progress will be lost when you leave and will not be saved.</p>
-        <p className="mb-4">By logging in, you can:</p>
-        <ul className="list-disc list-inside mb-4">
-            <li>Save your characters and progress</li>
-            <li>Access your game from any device</li>
-            <li>Unlock exclusive content and features</li>
-        </ul>
-        <div className="flex justify-end">
-            <Link href="/login">
-                <div className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition duration-300">
-                    Log In
+        <Modal isOpen={!dismissed} onClose={() => setDismissed(true)}>
+        <div className="space-y-6 text-white">
+            <div className="space-y-2">
+                <p className="text-sm uppercase tracking-[0.4em] text-white/60">Heads up</p>
+                <h2 className="text-2xl font-semibold">This adventure won&apos;t be saved</h2>
+                <p className="text-white/80 leading-relaxed">
+                    You&apos;re about to enter <span className="text-rose-300 font-medium">{setting?.name}</span> as a guest. Once you leave, your character sheet, inventory, and objective progress disappear.
+                </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-[rgba(33,33,38,0.85)] divide-y divide-white/10 overflow-hidden">
+                {[ 
+                    { title: 'Persist your characters', description: 'Save and return to them anytime, across devices.' },
+                    { title: 'Unlock world archives', description: 'Browse prior turns, lore drops, and branching choices.' },
+                    { title: 'Access advanced systems', description: 'Inventory, objective tracker, and stat modules stay in sync.' }
+                ].map((item, idx) => (
+                    <div key={idx} className="p-4 flex gap-4 items-start">
+                        <span className="w-10 h-10 rounded-full bg-gradient-to-r from-rose-400 via-amber-500 to-red-800 flex items-center justify-center text-white font-semibold">
+                            {idx + 1}
+                        </span>
+                        <div>
+                            <p className="font-semibold text-white">{item.title}</p>
+                            <p className="text-sm text-white/70">{item.description}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="text-sm text-white/70">Log in now to keep everything synced.</p>
+                <div className="flex gap-3">
+                    <button onClick={() => setDismissed(true)} className="px-5 py-2 rounded-full border border-white/20 text-white/80 whitespace-nowrap">
+                        Continue as guest
+                    </button>
+                    <Link href="/login" className="px-6 py-2 rounded-full bg-gradient-to-r from-rose-400 via-amber-600 to-red-800 text-white font-semibold shadow whitespace-nowrap">
+                        Log in &amp; save
+                    </Link>
                 </div>
-            </Link>
-        </div>
+            </div>
         </div>
     </Modal>
     );
