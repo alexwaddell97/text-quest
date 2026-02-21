@@ -262,7 +262,7 @@ export default function About() {
               </div>
             )}
             {!loading && !isFetchingMore && !hasMore && settings.length > 0 && (
-              <p className="text-center text-white/60 text-sm">You've reached the end.</p>
+              <p className="text-center text-white/60 text-sm">You&apos;ve reached the end.</p>
             )}
             {!loading && settings.length === 0 && (
               <div className="text-sm text-white/60">No worlds found. Try a different filter.</div>
