@@ -136,7 +136,7 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
                 prompt: p,
                 n: 1,
                 size: '1024x1024',
-                quality: 'medium',
+                quality: 'medium' as any,
             });
             return res.data[0]?.b64_json ?? null;
         };

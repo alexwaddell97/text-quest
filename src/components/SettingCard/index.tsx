@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from '@/context';
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
@@ -216,7 +217,7 @@ export default function SettingCard({ setting, onClick }: any) {
                     {/* Cover image header */}
                     {setting.cover_image && (
                         <div className="relative h-36 w-full overflow-hidden rounded-t-3xl">
-                            <img src={setting.cover_image} alt={setting.name} className="h-full w-full object-cover" />
+                            <Image src={setting.cover_image} alt={setting.name} fill className="object-cover" />
                             <div className="absolute inset-0 bg-gradient-to-t from-[#111114] via-black/30 to-transparent" />
                         </div>
                     )}

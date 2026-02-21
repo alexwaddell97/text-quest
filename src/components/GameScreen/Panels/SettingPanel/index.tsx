@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
+import Image from 'next/image';
 import { useGameContext } from '@/context/gameContext';
 import { Quest, QuestChange } from '@/types';
 import { applyGuestQuestChanges } from '@/utils/guestCharacters';
@@ -244,10 +245,11 @@ const SettingPanel: React.FC = () => {
             {setting ? (
                 <>
                     <div className="relative mb-5 h-40 overflow-hidden rounded-2xl border border-white/10">
-                        <img
+                        <Image
                             src={setting.cover_image}
                             alt={`${setting.name} cover image`}
-                            className="h-full w-full object-cover"
+                            fill
+                            className="object-cover"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4">
                             <p className="text-xs uppercase tracking-[0.35em] text-white/60">World</p>

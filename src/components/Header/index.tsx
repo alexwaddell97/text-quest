@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSession, signOut } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 
@@ -34,7 +35,7 @@ export default function Header() {
             <div className="relative mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-4">
                 <Link href="/">
                     <motion.div className="flex items-center gap-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <img src="/logo.svg" alt="Roleplaying Realm logo" className="h-10 w-10" />
+                        <Image src="/logo.svg" alt="Roleplaying Realm logo" width={40} height={40} />
                         <div>
                             <p className="text-[11px] uppercase tracking-[0.45em] text-white/50">Interactive GM</p>
                             <h1 className="text-lg font-semibold text-white">Roleplaying Realm</h1>
