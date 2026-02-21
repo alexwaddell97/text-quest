@@ -1,13 +1,11 @@
-import { MongoClient, ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 import { NextResponse } from 'next/server';
+import { getDb } from '@/lib/mongodb';
 
 export async function POST(request: Request) {
-    const client = new MongoClient(process.env.MONGODB_URI as string);
-
     try {
-        await client.connect();
-        const database = client.db('dev');
-        const usersCollection = database.collection('users');
+        const db = await getDb();
+        const usersCollection = db.collection('users');
 
         const { userId } = await request.json();
 
@@ -32,7 +30,5 @@ export async function POST(request: Request) {
     } catch (error) {
         console.log(error);
         return NextResponse.json({ error: 'Failed to update user theme' }, { status: 500 });
-    } finally {
-        await client.close();
     }
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { MongoClient, ObjectId, Collection } from 'mongodb';
-
-const client = new MongoClient(process.env.MONGODB_URI || '');
+import { ObjectId, Collection } from 'mongodb';
+import { getDb } from '@/lib/mongodb';
 
 interface VoteRequest {
     user_id: ObjectId;
@@ -17,10 +16,9 @@ export async function POST(request: Request) {
     }
 
     try {
-        await client.connect();
-        const database = client.db('dev');
-        const settingsCollection: Collection<{ _id: ObjectId; votes: number }> = database.collection('settings');
-        const usersCollection: Collection<{ _id: ObjectId; votes: ObjectId[] }> = database.collection('users');
+        const db = await getDb();
+        const settingsCollection: Collection<{ _id: ObjectId; votes: number }> = db.collection('settings');
+        const usersCollection: Collection<{ _id: ObjectId; votes: ObjectId[] }> = db.collection('users');
 
         if (voteType === 'up') {
             await settingsCollection.updateOne(
@@ -38,19 +36,15 @@ export async function POST(request: Request) {
                 { $inc: { votes: -1 } }
             );
 
-            console.log('Removing vote:', setting_id, user_id);
-            
-        await usersCollection.updateOne(
-            { _id: new ObjectId(user_id) },
-            { $pull: { votes: new ObjectId(setting_id) } }
-        );
+            await usersCollection.updateOne(
+                { _id: new ObjectId(user_id) },
+                { $pull: { votes: new ObjectId(setting_id) } }
+            );
         }
 
         return NextResponse.json({ message: 'Vote recorded' });
     } catch (error) {
         console.error(error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-    } finally {
-        await client.close();
     }
 }

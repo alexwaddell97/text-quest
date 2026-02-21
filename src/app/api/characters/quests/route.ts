@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { MongoClient, ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 import { Quest, QuestChange } from '@/types';
 import { applyQuestChanges } from '@/utils/questUtils';
+import { getDb } from '@/lib/mongodb';
 
 export async function PATCH(request: Request): Promise<NextResponse> {
     const { characterId, changes }: { characterId: string; changes: QuestChange[] } = await request.json();
@@ -10,11 +11,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: 'characterId and a non-empty changes array are required' }, { status: 400 });
     }
 
-    const client = new MongoClient(process.env.MONGODB_URI || '');
-
     try {
-        await client.connect();
-        const db = client.db('dev');
+        const db = await getDb();
         const charactersCollection = db.collection('characters');
 
         const character = await charactersCollection.findOne({ _id: new ObjectId(characterId) });
@@ -34,7 +32,5 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     } catch (error: any) {
         console.error('Error updating quests:', error);
         return NextResponse.json({ error: error?.message ?? 'Failed to update quests' }, { status: 500 });
-    } finally {
-        await client.close();
     }
 }

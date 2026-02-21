@@ -1,16 +1,42 @@
 
+export interface SettingTheme {
+    bg: string;
+    panel: string;
+    elevated: string;
+    muted: string;
+    text: string;
+    textWeak: string;
+    accent: string;
+    accentStrong: string;
+    border: string;
+    glow: string;
+    /** Two colours used for the ambient blur orb on the play page */
+    ambientA: string;
+    ambientB: string;
+    /** CSS gradient string for primary action buttons */
+    buttonGradient: string;
+    /** CSS gradient string for the player "You" message bubble background */
+    playerBubble: string;
+    /** Google Fonts CSS2 API URL to load; leave empty string to skip */
+    fontUrl: string;
+    /** CSS font-family stack for headings/labels within the play screen */
+    fontDisplay: string;
+}
+
 export interface Setting {
     _id: string;
     name: string;
     description: string;
     system_message: string;
-    genre: string;
+    genres: string[];
     factions: { name: string; description: string }[];
     key_beings: { name: string; description: string }[];
     key_themes: { theme: string; description: string }[];
     major_locations: { name: string; description: string }[];
     rules: { rule: string; description: string }[];
     cover_image: string;
+    /** Optional per-setting visual theme; falls back to a derived theme if absent */
+    theme?: SettingTheme;
 }
 
 export interface InventoryItem {
@@ -64,6 +90,18 @@ export interface QuestChange {
     parent_quest_id: string | null;
 }
 
+export interface ChronicleEntry {
+    turn: number;
+    location: string;
+    entry: string;
+    timestamp: string; // ISO string
+}
+
+export interface WorldFact {
+    id: string;
+    fact: string;
+}
+
 export interface Message {
     text: string;
     sender: "You" | "Gamemaster";
@@ -100,6 +138,7 @@ export interface Character {
         charisma: number;
     };
     image_url?: string;
+    gender?: 'male' | 'female' | 'non-specific';
     quests?: Quest[];
 }
 

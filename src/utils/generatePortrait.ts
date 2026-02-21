@@ -10,7 +10,7 @@ interface CharacterImageInput {
     backstory?: string;
     setting?: {
         name?: string;
-        genre?: string;
+        genres?: string[];
         system_message?: string;
         key_themes?: ({ theme: string } | string)[];
         major_locations?: Record<string, { name: string }>;
@@ -24,7 +24,7 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
 
         const settingContext = [
             setting?.name ? `Setting name: ${setting.name}` : null,
-            setting?.genre ? `Genre: ${setting.genre}` : null,
+            setting?.genres?.length ? `Genre: ${setting.genres.join(', ')}` : null,
             setting?.system_message ? `Setting description: ${setting.system_message.slice(0, 400)}` : null,
             setting?.key_themes?.length ? `Themes: ${setting.key_themes.slice(0, 4).map((t: any) => t.theme ?? t).join(', ')}` : null,
             setting?.major_locations ? `Locations: ${Object.values(setting.major_locations).slice(0, 3).map((l: any) => l.name).join(', ')}` : null,
@@ -49,6 +49,10 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
                     content:
                         'You write safe, purely visual descriptions for a character portrait illustration. ' +
                         'The output will be sent directly to an image generation model and MUST pass content moderation — keep everything family-friendly and visually positive.\n\n' +
+                        'CRITICAL — PRESERVE EVERY SPECIFIC VISUAL DETAIL: You MUST extract and reproduce EVERY specific visual attribute mentioned in the description verbatim. ' +
+                        'This includes exact hair colour (e.g. "vibrant green hair"), exact eye colour (e.g. "piercing silver eyes"), exact clothing colours and styles (e.g. "flowing blue robes"), and ALL supernatural or unusual visual traits. ' +
+                        'Never substitute a specific colour or trait with a generic one. If the description says green hair, the output MUST say green hair. If it says blue robes, the output MUST say blue robes. ' +
+                        'Treat the description as ground truth for every visual attribute.\n\n' +
                         'CRITICAL — GENDER: The character\'s gender must be preserved exactly as described. ' +
                         `This character is a ${genderLabel} (pronouns: ${genderPronoun}). ` +
                         'The APPEARANCE line must begin with the gender word (e.g. "A young woman with..." or "A tall man with..."). Never swap the gender.\n\n' +
@@ -61,7 +65,7 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
                         '- NEVER mention: weapons drawn ready to attack, blood, wounds, death, darkness, evil, horror, menace, undead, demons, nudity, or anything disturbing\n' +
                         '- Clothing/armour is fine to mention (e.g. "leather armour", "flowing robes") but no gore or threat language\n' +
                         '- Cultural markings or tattoos are fine if described neutrally (e.g. "geometric tattoo on cheek")\n\n' +
-                        '1. APPEARANCE: 1–2 sentences — start with gender ("A [woman/man/person] with..."), then face, build, hair, eyes, skin tone, outfit. Strictly visual.\n' +
+                        '1. APPEARANCE: 1–2 sentences — start with gender ("A [woman/man/person] with..."), then include EVERY specific detail from the description: face, build, exact hair colour, exact eye colour, skin tone, outfit. Strictly visual. Preserve all unusual/supernatural visual traits exactly.\n' +
                         '2. WORLD: 1 sentence — visual aesthetic, colour palette, architecture, atmosphere. No real IP names.\n' +
                         '3. LOCATION: 1 sentence — a visually interesting background location suited to the character. No IP names.\n' +
                         '4. ART_STYLE: Exactly 1 sentence — describe how this image should look as if it were a panel or still frame from INSIDE this specific world, not a generic painting.\n' +
@@ -90,7 +94,7 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
                     ].filter(Boolean).join('\n'),
                 },
             ],
-            max_completion_tokens: 450,
+            max_completion_tokens: 700,
         } as any);
 
         const rawSummary = summaryCompletion.choices[0]?.message?.content?.trim() ?? '';
@@ -106,7 +110,7 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
         const settingThemes = setting?.key_themes?.slice(0, 3).map((t: any) => t.theme ?? t).join(', ') ?? '';
 
         // Keep the genre label safe (avoid words that trigger moderation on their own)
-        const safeGenre = (setting?.genre ?? 'fantasy').replace(/horror|gore|adult|explicit/gi, 'atmospheric');
+        const safeGenre = ((setting?.genres?.length ? setting.genres.join(', ') : null) ?? 'fantasy').replace(/horror|gore|adult|explicit/gi, 'atmospheric');
 
         // Strip any remaining high-risk phrases that could leak through from backstory content
         const sanitise = (s: string) =>
@@ -115,6 +119,7 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
         const promptParts = [
             `Cinematic portrait of a ${genderLabel} named ${name || 'a character'} (${race || 'Human'}) in a ${safeGenre} setting.`,
             appearanceSummary ? sanitise(appearanceSummary) : null,
+            description ? `Character description (follow exactly — preserve all specific hair colour, eye colour, clothing and visual traits): ${sanitise(description)}` : null,
             locationBackground
                 ? `Background setting: ${sanitise(locationBackground)}`
                 : worldAesthetic

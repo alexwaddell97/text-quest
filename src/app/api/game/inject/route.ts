@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { MongoClient, ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 import { chatHistoryStore } from '@/utils/guestSessionStore';
+import { getDb } from '@/lib/mongodb';
 
 /**
  * POST /api/game/inject
@@ -26,20 +27,15 @@ export async function POST(request: Request): Promise<NextResponse> {
         if (chatHistoryStore[key]) {
             chatHistoryStore[key].push(systemMessage);
         }
-        // If no session exists yet for this guest, the message will be injected on
-        // next session init via the Active Quests context — safe to skip silently.
         return NextResponse.json({ ok: true });
     }
 
-    // Authenticated: write directly to MongoDB
-    const isValidObjectId = (v: any): boolean => typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
+    const isValidObjectId = (v: unknown): boolean => typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
 
-    const client = new MongoClient(process.env.MONGODB_URI || '');
     try {
-        await client.connect();
-        const sessionsCollection = client.db('dev').collection('sessions');
+        const db = await getDb();
+        const sessionsCollection = db.collection('sessions');
 
-        // Prefer gameId lookup; fall back to character_id if gameId not supplied
         const query = gameId && isValidObjectId(gameId)
             ? { _id: new ObjectId(gameId) }
             : isValidObjectId(characterId)
@@ -58,7 +54,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     } catch (err: any) {
         console.error('inject route error:', err);
         return NextResponse.json({ error: err?.message ?? 'Failed to inject message' }, { status: 500 });
-    } finally {
-        await client.close();
     }
 }

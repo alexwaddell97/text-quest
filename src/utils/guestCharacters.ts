@@ -36,6 +36,7 @@ export function buildGuestCharacter(
         backstory: string;
         stats: Character['stats'];
         image_url?: string;
+        gender?: Character['gender'];
     },
     settingId: string,
 ): Character {
