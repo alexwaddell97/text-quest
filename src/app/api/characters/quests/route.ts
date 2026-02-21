@@ -3,8 +3,6 @@ import { MongoClient, ObjectId } from 'mongodb';
 import { Quest, QuestChange } from '@/types';
 import { applyQuestChanges } from '@/utils/questUtils';
 
-export { applyQuestChanges };
-
 export async function PATCH(request: Request): Promise<NextResponse> {
     const { characterId, changes }: { characterId: string; changes: QuestChange[] } = await request.json();
 
