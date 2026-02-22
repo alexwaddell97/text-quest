@@ -291,6 +291,7 @@ const CharacterPanel: React.FC = () => {
                                 <div className="mt-2 h-3 rounded-full bg-white/10">
                                     <motion.div
                                         className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500"
+                                        initial={{ width: '0%' }}
                                         animate={{ width: `${Math.min(100, Math.round((character.xp.current / Math.max(character.xp.max, 1)) * 100))}%` }}
                                         transition={{ duration: 0.9, ease: [0.25, 0.46, 0.45, 0.94] }}
                                     />
@@ -574,7 +575,7 @@ const CharacterPanel: React.FC = () => {
                                             {char.gender && (
                                                 <>
                                                     <span>·</span>
-                                                    <div className="group relative flex items-center">
+                                                    <div className="group/gender relative flex items-center">
                                                         {char.gender === 'male' && (
                                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                 <circle cx="10" cy="14" r="5"/>
@@ -598,7 +599,7 @@ const CharacterPanel: React.FC = () => {
                                                                 <line x1="17" y1="12" x2="21" y2="12"/>
                                                             </svg>
                                                         )}
-                                                        <div className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/10 bg-[var(--elevated)] px-2 py-1 text-[10px] font-semibold text-white/70 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                                        <div className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/10 bg-[var(--elevated)] px-2 py-1 text-[10px] font-semibold text-white/70 opacity-0 shadow-lg transition-opacity group-hover/gender:opacity-100">
                                                             {char.gender === 'non-specific' ? 'Nonbinary' : char.gender.charAt(0).toUpperCase() + char.gender.slice(1)}
                                                             <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[var(--elevated)]" />
                                                         </div>

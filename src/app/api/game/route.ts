@@ -61,6 +61,8 @@ interface ChatRequest {
     message: string;
     gameId: string;
     role?: string;
+    /** Present when the character just levelled up — lets the GM acknowledge it as a story beat */
+    levelUp?: { previousLevel: number; newLevel: number; chosenStat: string };
 }
 
 // ─── Prompt builders ────────────────────────────────────────────────────────
@@ -135,11 +137,23 @@ Currency and item rewards must be proportionate to level:
 - Level 16-20: 500-2000 coins
 Legendary/rare items only from difficult encounters, bosses, or major quest completions.
 
+XP SYSTEM (critical)
+Call the award_xp tool whenever the player earns experience outside of quest completions (which are handled automatically). XP sources include:
+- Defeating enemies (common: 5–15, elite/named: 20–50, boss: 50–150)
+- Discovering new locations or secrets (5–25)
+- Successful social/stealth/puzzle challenges (5–30)
+- Surviving a near-death situation (10–30)
+- Any other meaningful non-trivial achievement
+Scale all XP amounts proportionally with the player's level (multiply base by roughly level/2 for levels above 5). Do NOT call award_xp for completing quests — quest XP is granted automatically. Do NOT call award_xp for trivial actions (picking up an item, walking to a door, having a casual conversation).
+
 STAT-GATING
 Stats determine likelihood of success, not permission to attempt. Low Strength means the door probably won't budge — not that the player can't try. Low Charisma means the guard likely won't be charmed — not that the player can't attempt it. Make failure narratively interesting and leave paths open.
 
 IMPOSSIBLE ACTIONS
 Only block actions that are literally impossible in the world's physics: conjuring items out of thin air ("I find 10,000 gold coins on the ground"), instant teleportation with no established mechanism, or similar reality-breaking declarations. Everything else — however risky, foolish, or unexpected — should be played out with honest consequences.
+
+META-COMMENTARY IS FORBIDDEN
+Never say things like "Let me resolve all of this properly", "Let me get everything caught up", "Let me fully catch up", or any variation of meta-commentary about what you intend to do. You are the Gamemaster — always respond by actually narrating the story, not by describing what you plan to narrate. Every response must be an immersive, in-world description of events. If something needs to be "resolved", resolve it by narrating it now.
 
 CHRONICLE & WORLD FACTS (mandatory)
 Call update_chronicle at the end of EVERY turn with a brief entry (1-2 factual sentences) about what just happened — the player's action and its outcome. Be specific: exact names, locations, and results. These entries form the player's adventure journal and your own persistent memory.
@@ -161,7 +175,7 @@ function buildSettingPrompt(setting: Setting): string {
 }
 
 /** Character state — rebuilt fresh every turn so the model always has current data. */
-function buildCharacterPrompt(character: Character): string {
+function buildCharacterPrompt(character: Character, levelUp?: { previousLevel: number; newLevel: number; chosenStat: string }): string {
     const quests = character.quests ?? [];
     const activeQuests = quests.filter(q => q.status === 'active');
     const questsStr = activeQuests.length === 0
@@ -170,11 +184,15 @@ function buildCharacterPrompt(character: Character): string {
             `[ID: ${q.id}]${q.parent_quest_id ? ` (stage of: ${q.parent_quest_id})` : ''} ${q.title} — ${q.description} | Objectives: ${q.objectives.map(o => `[${o.id}] ${o.description} (${o.completed ? 'done' : 'pending'})`).join(', ')}`
         ).join(' || ');
 
-    return `CHARACTER STATE (current — always trust this over prior messages):
-Name: ${character.name} | Race: ${character.race} | Level: ${character.level}
+    const levelUpBanner = levelUp
+        ? `\n⚑ LEVEL UP: ${character.name} just reached Level ${levelUp.newLevel} (was ${levelUp.previousLevel}). Stat boosted: ${levelUp.chosenStat} (+1). You MUST acknowledge this in your narrative — describe the character feeling their growth. In story-driven settings (virtual worlds, anime, game-within-a-game) treat it as an explicit in-world event; in grounded settings, narrate it as a subtle but meaningful surge of strength or confidence.`
+        : '';
+
+    return `CHARACTER STATE (current — always trust this over prior messages):${levelUpBanner}
+Name: ${character.name} | Race: ${character.race} | Level: ${character.level}${levelUp ? ` ← just levelled up from ${levelUp.previousLevel}` : ''}
 Health: ${character.health.current}/${character.health.max} | XP: ${character.xp.current}/${character.xp.max}
 Currency: ${character.currency}
-Stats: STR ${character.stats.strength} | AGI ${character.stats.agility} | INT ${character.stats.intelligence} | CHA ${character.stats.charisma}
+Stats: STR ${character.stats.strength} | AGI ${character.stats.agility} | INT ${character.stats.intelligence} | CHA ${character.stats.charisma}${levelUp ? ` (${levelUp.chosenStat} was just increased)` : ''}
 Description: ${character.description}
 Backstory: ${character.backstory}
 Inventory: ${character.inventory.length === 0 ? 'Empty' : character.inventory.map((item: Item) => `${item.name} ×${item.quantity} [${item.rarity}] — ${item.description}`).join("; ")}
@@ -297,6 +315,21 @@ const questsTool: Anthropic.Messages.Tool = {
             },
         },
         required: ["changes"],
+    },
+};
+
+const xpTool: Anthropic.Messages.Tool = {
+    name: "award_xp",
+    description:
+        "Call this when the player earns XP from non-quest sources — defeating enemies, discovering locations, solving puzzles, surviving challenges, etc. " +
+        "Do NOT call for quest completions (those are handled automatically). Do NOT call for trivial actions.",
+    input_schema: {
+        type: "object" as const,
+        properties: {
+            amount: { type: "number", description: "XP to award. Must be a positive integer. Scale with player level and difficulty." },
+            reason: { type: "string", description: "Brief reason, e.g. 'Defeated the cave troll', 'Discovered the hidden library', 'Persuaded the guard captain'." },
+        },
+        required: ["amount", "reason"],
     },
 };
 
@@ -435,10 +468,42 @@ function isPlaceholderNarrative(text: string | undefined | null): boolean {
     );
 }
 
+/**
+ * Returns true if the model returned meta-commentary instead of actual gameplay —
+ * e.g. "Let me resolve all of this properly" / "Let me get everything caught up".
+ * These loop responses break the game and must be retried with strong instruction.
+ */
+function isLoopNarrative(text: string | undefined | null): boolean {
+    if (!text) return false;
+    const t = text.toLowerCase();
+    const loopPhrases = [
+        'let me resolve',
+        'let me get everything',
+        'let me catch',
+        'let me fully',
+        'properly resolved',
+        'properly caught up',
+        'fully caught up',
+        'get you fully caught up',
+        'get everything properly',
+        'move the story forward in one',
+        'clean turn',
+        'i need to resolve',
+        'before i can continue',
+        'i should resolve',
+        'i will resolve',
+        "i'll resolve",
+        'catching everything up',
+        'let me address all',
+        'let me handle all',
+    ];
+    return loopPhrases.some(phrase => t.includes(phrase));
+}
+
 // ─── Main POST handler ─────────────────────────────────────────────────────
 
 export async function POST(request: Request): Promise<NextResponse> {
-    const { setting, character, message, gameId, role }: ChatRequest = await request.json();
+    const { setting, character, message, gameId, role, levelUp }: ChatRequest = await request.json();
 
     const db = await getDb();
     const sessionsCollection = db.collection("sessions");
@@ -613,7 +678,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
 
         // ── Refresh character state in system messages ──────────────────────
-        const freshCharacterPrompt = buildCharacterPrompt(character);
+        const freshCharacterPrompt = buildCharacterPrompt(character, levelUp);
         let refreshedSystemMsgs = systemMsgs.map(msg => {
             if (msg.content.startsWith('CHARACTER STATE')) {
                 return { ...msg, content: freshCharacterPrompt };
@@ -692,13 +757,14 @@ export async function POST(request: Request): Promise<NextResponse> {
             max_tokens: 2048,
             system: systemBlocks,
             messages: sanitizedMessages,
-            tools: [inventoryTool, currencyTool, questsTool, chronicleTool, worldFactsTool],
+            tools: [inventoryTool, currencyTool, questsTool, xpTool, chronicleTool, worldFactsTool],
         });
 
         // ── Parse tool calls and text from response ─────────────────────────
         let inventoryChanges: { action: string; name: string; description?: string; rarity?: string; quantity: number; location_context?: string; usable_at?: string }[] = [];
         let currencyDelta = 0;
         let questChanges: QuestChange[] = [];
+        let xpGain = 0;
         let rawNarrative = '';
         let pendingChronicleEntry: { location: string; entry: string } | null = null;
         const pendingWorldFactChanges: { action: string; id: string; fact: string }[] = [];
@@ -719,6 +785,11 @@ export async function POST(request: Request): Promise<NextResponse> {
                     const args = block.input as { changes: QuestChange[] };
                     if (Array.isArray(args.changes)) {
                         questChanges = questChanges.concat(args.changes);
+                    }
+                } else if (block.name === 'award_xp') {
+                    const args = block.input as { amount: number; reason: string };
+                    if (typeof args.amount === 'number' && args.amount > 0) {
+                        xpGain += args.amount;
                     }
                 } else if (block.name === 'update_chronicle') {
                     const args = block.input as { location: string; entry: string };
@@ -764,7 +835,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                         ],
                     },
                 ],
-                tools: [inventoryTool, currencyTool, questsTool, chronicleTool, worldFactsTool],
+                tools: [inventoryTool, currencyTool, questsTool, xpTool, chronicleTool, worldFactsTool],
             });
 
             for (const block of followUp.content) {
@@ -858,8 +929,13 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         structuredResponse = parseNarrative(rawNarrative) ?? emptyStructured();
 
-        // ── Retry if Claude returned a placeholder narrative ("...") ─────────
-        if (isPlaceholderNarrative(structuredResponse?.narrative)) {
+        // ── Retry if Claude returned a placeholder or loop/meta-commentary narrative ─────────
+        const needsRetry = isPlaceholderNarrative(structuredResponse?.narrative) || isLoopNarrative(structuredResponse?.narrative);
+        if (needsRetry) {
+            const isLoop = isLoopNarrative(structuredResponse?.narrative);
+            const retryInstruction = isLoop
+                ? 'CRITICAL: Your previous response was meta-commentary ("Let me resolve...", "Let me catch up...", etc.) instead of actual gameplay. This is NEVER allowed. You must respond as the Gamemaster narrating what actually happens in the story — not as an AI describing what you intend to do. Directly narrate the outcome of the player\'s last action right now. Return a single raw JSON object with fields: "narrative" (full immersive story text, at least 2 sentences), "options" (2–4 choices), "skill_options", "item_options". No meta-commentary, no preamble — raw JSON only.'
+                : 'Your previous response contained a placeholder value ("...") instead of actual content. Write the FULL narrative now. Return a single raw JSON object with fields: "narrative" (full story text, at least 2 sentences), "options" (2–4 choices), "skill_options", "item_options". No placeholders, no abbreviations, no markdown fences.';
             const retryMsg = await anthropic.messages.create({
                 model: 'claude-sonnet-4-6',
                 max_tokens: 2048,
@@ -868,7 +944,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                     ...sanitizedMessages,
                     {
                         role: 'user',
-                        content: 'Your previous response contained a placeholder value ("...") instead of actual content. Write the FULL narrative now. Return a single raw JSON object with fields: "narrative" (full story text, at least 2 sentences), "options" (2–4 choices), "skill_options", "item_options". No placeholders, no abbreviations, no markdown fences.',
+                        content: retryInstruction,
                     },
                 ],
             });
@@ -878,7 +954,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             }
             if (retryRaw) {
                 const retried = parseNarrative(retryRaw);
-                if (!isPlaceholderNarrative(retried?.narrative)) {
+                if (!isPlaceholderNarrative(retried?.narrative) && !isLoopNarrative(retried?.narrative)) {
                     structuredResponse = retried;
                     rawNarrative = retryRaw;
                 }
@@ -952,6 +1028,13 @@ export async function POST(request: Request): Promise<NextResponse> {
         inventoryChanges = validateInventoryChanges(inventoryChanges, character);
         currencyDelta = validateCurrencyDelta(currencyDelta, character);
 
+        // Cap XP gain to a reasonable per-turn maximum (prevents runaway awards)
+        if (xpGain > 0) {
+            const level = character.level ?? 1;
+            const maxXpPerTurn = Math.min(500, 20 + level * 25);
+            xpGain = Math.min(Math.floor(xpGain), maxXpPerTurn);
+        }
+
         // ── Apply chronicle entry ────────────────────────────────────────────
         if (pendingChronicleEntry) {
             const lastEntry = chronicle[chronicle.length - 1];
@@ -1018,6 +1101,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             inventoryChanges,
             currencyDelta,
             questChanges,
+            xpGain,
             chronicleEntries: chronicle,
             worldFacts,
         });

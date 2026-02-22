@@ -9,7 +9,11 @@
     "lint": "next lint",
     "seed:themes": "tsx scripts/seed-themes.ts",
     "seed:settings": "tsx scripts/seed-settings.ts",
-    "migrate:genres": "tsx scripts/migrate-genres.ts"
+    "migrate:genres": "tsx scripts/migrate-genres.ts",
+    "patch:wow-theme": "tsx scripts/patch-wow-theme.ts",
+    "patch:elder-scrolls": "tsx scripts/patch-elder-scrolls.ts",
+    "patch:fallout": "tsx scripts/patch-fallout-theme.ts",
+    "patch:cyberpunk": "tsx scripts/patch-cyberpunk-theme.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -23,6 +27,7 @@
     "motion": "^12.34.2",
     "next": "14.1.0",
     "next-auth": "^4.24.11",
+    "onborda": "^1.2.5",
     "openai": "^4.28.0",
     "react": "^18",
     "react-dom": "^18"

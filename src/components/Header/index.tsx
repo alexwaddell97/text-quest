@@ -31,13 +31,13 @@ export default function Header() {
     const isPlayPage = pathname.startsWith('/play');
 
     useEffect(() => {
-        const onChange = () => {
-            const inFs = !!document.fullscreenElement;
+        const onChange = (e: Event) => {
+            const inFs = (e as CustomEvent<{ value: boolean }>).detail.value;
             setIsFullscreen(inFs);
             if (!inFs) setIsHovered(false);
         };
-        document.addEventListener('fullscreenchange', onChange);
-        return () => document.removeEventListener('fullscreenchange', onChange);
+        window.addEventListener('playfullscreenchange', onChange);
+        return () => window.removeEventListener('playfullscreenchange', onChange);
     }, []);
 
     const navLinks = useMemo(
@@ -118,7 +118,7 @@ export default function Header() {
                     </nav>
                     <div className="flex items-center gap-3">
                         {session ? (
-                            <div className="relative" ref={dropdownRef}>
+                            <div id="onborda-account" className="relative" ref={dropdownRef}>
                                 <button
                                     onClick={() => setIsDropdownOpen((p) => !p)}
                                     className="group flex items-center gap-2.5 rounded-full border border-white/10 bg-white/5 pl-1 pr-3 py-1 text-sm font-medium text-white/80 transition hover:border-white/30 hover:text-white"

@@ -13,15 +13,18 @@ import { applyGuestInventoryChanges, applyGuestQuestChanges, applyGuestXpAndLeve
 import { getSettingTheme, themeToCssVars } from "@/utils/settingTheme";
 import LevelUpModal from "@/components/GameScreen/Modals/LevelUpModal"
 import GMAdminPanel from "@/components/GameScreen/Modals/GMAdminPanel"
-import { Maximize2, Minimize2 } from "lucide-react"
+import SettingEffect from "@/components/SettingEffect"
+import { Maximize2, Minimize2, MessageSquare, User, Map } from "lucide-react"
 
 export default function Play() {
     const [messages, setMessages] = useState<Message[]>([]);
     const { character, gameId, setGameId, setting, setSetting, setCharacter, setChronicle, setWorldFacts } = useGameContext();
     const [input, setInput] = useState<string>("");
     const [pendingLevelUp, setPendingLevelUp] = useState<{ xpGain: number; newLevel: number; stats: Record<string, number> } | null>(null);
+    const [justLeveledUp, setJustLeveledUp] = useState<{ previousLevel: number; newLevel: number; chosenStat: string } | null>(null);
     const [isAdminOpen, setIsAdminOpen] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [mobilePanelTab, setMobilePanelTab] = useState<'character' | 'chat' | 'setting'>('chat');
     const inputRef = useRef<HTMLInputElement>(null);
     const bootstrapSignatureRef = useRef<string | null>(null);
     const searchParams = useSearchParams();
@@ -234,6 +237,10 @@ export default function Play() {
         }
         inputRef.current?.focus();
 
+        // Capture and clear any pending level-up context so it's sent once with this message
+        const levelUpContext = justLeveledUp;
+        setJustLeveledUp(null);
+
         fetch("/api/game", {
             method: "POST",
             headers: {
@@ -245,6 +252,7 @@ export default function Play() {
                 gameId,
                 message: newMessage.text,
                 role,
+                ...(levelUpContext ? { levelUp: levelUpContext } : {}),
             }),
         })
             .then((response) => response.json())
@@ -385,7 +393,7 @@ export default function Play() {
                     if (Array.isArray(gameData.chronicleEntries)) setChronicle(gameData.chronicleEntries);
                     if (Array.isArray(gameData.worldFacts)) setWorldFacts(gameData.worldFacts);
 
-                    // XP gain from completed quests
+                    // XP gain — quest completions + non-quest sources (kills, exploration, etc.)
                     // Count both explicit complete_quest actions AND quests that
                     // auto-completed because all their objectives were ticked off.
                     const explicitCompletes = questChanges.filter((c) => c.action === 'complete_quest').map((c) => c.quest_id);
@@ -404,8 +412,12 @@ export default function Play() {
                         }
                     }
                     const completedQuestCount = explicitCompletes.length + autoCompletedQuestIds.size;
-                    if (completedQuestCount > 0 && character._id) {
-                        const xpGain = completedQuestCount * 50 * (character.level ?? 1);
+                    const questXp = completedQuestCount * 50 * (character.level ?? 1);
+                    const combatXp: number = gameData.xpGain ?? 0;
+                    const totalXpGain = questXp + combatXp;
+
+                    if (totalXpGain > 0 && character._id) {
+                        const xpGain = totalXpGain;
                         const projectedXp = (character.xp?.current ?? 0) + xpGain;
                         const wouldLevelUp = projectedXp >= (character.xp?.max ?? 100);
 
@@ -462,7 +474,8 @@ export default function Play() {
 
     const handleLevelUpConfirm = async (chosenStat: string) => {
         if (!character?._id || !pendingLevelUp) return;
-        const { xpGain } = pendingLevelUp;
+        const { xpGain, newLevel } = pendingLevelUp;
+        const previousLevel = newLevel - 1;
         try {
             if (!session?.user?.id) {
                 const result = applyGuestXpAndLevelUp(character._id, xpGain, chosenStat);
@@ -480,6 +493,8 @@ export default function Play() {
                     setCharacter((prev) => prev ? { ...prev, xp: data.xp, level: data.level, stats: data.stats } : prev);
                 }
             }
+            // Queue level-up context so the next message the player sends informs the GM
+            setJustLeveledUp({ previousLevel, newLevel, chosenStat });
         } catch (err) {
             console.error('Error applying level-up:', err);
         } finally {
@@ -501,19 +516,12 @@ export default function Play() {
 
     // Track browser fullscreen state — read current state on mount too so
     // navigating between settings while already fullscreen works correctly
-    useEffect(() => {
-        setIsFullscreen(!!document.fullscreenElement);
-        const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-        document.addEventListener('fullscreenchange', onChange);
-        return () => document.removeEventListener('fullscreenchange', onChange);
-    }, []);
-
     const toggleFullscreen = () => {
-        if (document.fullscreenElement) {
-            document.exitFullscreen();
-        } else {
-            document.documentElement.requestFullscreen();
-        }
+        setIsFullscreen(prev => {
+            const next = !prev;
+            window.dispatchEvent(new CustomEvent('playfullscreenchange', { detail: { value: next } }));
+            return next;
+        });
     };
 
     // Inject / clean up the Google Font <link> for this setting's display font
@@ -536,7 +544,7 @@ export default function Play() {
             data-full-width="true"
             data-lock-shell="true"
             className={`relative box-border flex h-full w-full flex-col items-center overflow-hidden bg-[var(--bg)] text-[var(--text)] transition-[padding] duration-300 ${
-                isFullscreen ? 'px-2 py-2 lg:px-4 lg:py-3' : 'px-4 py-6 lg:px-8 lg:py-10'
+                isFullscreen ? 'px-2 py-2 lg:px-4 lg:py-3' : 'px-0 py-0 xl:px-8 xl:py-10'
             }`}
             style={themeVars}
         >
@@ -549,6 +557,9 @@ export default function Play() {
                 }}
                 aria-hidden
             />
+            {setting && settingTheme && (
+                <SettingEffect setting={setting} theme={settingTheme} />
+            )}
             {setting && !session && <StartModal />}
 
             {/* GM Admin Panel — dev tool, toggle with Ctrl+Shift+G */}
@@ -559,21 +570,21 @@ export default function Play() {
                 onLevelUp={setPendingLevelUp}
             />
 
-            {/* Fullscreen toggle */}
+            {/* Fullscreen toggle — desktop only */}
             <button
                 onClick={toggleFullscreen}
-                title={isFullscreen ? 'Exit fullscreen (F11)' : 'Fullscreen mode'}
-                className="fixed bottom-6 left-6 z-[9997] flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-[rgba(18,18,20,0.85)] text-white/40 shadow-lg backdrop-blur transition hover:border-white/25 hover:text-white/70"
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen mode'}
+                className="fixed bottom-6 left-6 z-[9997] hidden xl:flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-[rgba(18,18,20,0.85)] text-white/40 shadow-lg backdrop-blur transition hover:border-white/25 hover:text-white/70"
             >
                 {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
 
-            {/* Floating GM button */}
+            {/* Floating GM button — desktop only */}
             {isAdminOpen ? null : (
                 <button
                     onClick={() => setIsAdminOpen(true)}
                     title="GM Admin Panel (Ctrl+Shift+G)"
-                    className="fixed bottom-6 right-6 z-[9997] flex items-center gap-2 rounded-2xl border border-rose-500/30 bg-[rgba(18,18,20,0.92)] px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-rose-400/70 shadow-lg backdrop-blur transition hover:border-rose-400/50 hover:text-rose-300"
+                    className="fixed bottom-6 right-6 z-[9997] hidden xl:flex items-center gap-2 rounded-2xl border border-rose-500/30 bg-[rgba(18,18,20,0.92)] px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-rose-400/70 shadow-lg backdrop-blur transition hover:border-rose-400/50 hover:text-rose-300"
                 >
                     <span className="text-sm">⚙</span>
                     GM
@@ -587,10 +598,54 @@ export default function Play() {
                     onConfirm={handleLevelUpConfirm}
                 />
             )}
-            <div className={`relative z-10 flex h-full w-full flex-1 flex-col min-h-0 transition-[max-width] duration-300 ${
-                isFullscreen ? 'max-w-[1800px]' : 'max-w-6xl'
+            {/* ── Mobile tab bar ─────────────────────────────────────────── */}
+            <nav className="xl:hidden fixed bottom-0 inset-x-0 z-[9998] flex items-stretch border-t border-white/10 bg-[rgba(10,10,12,0.96)] backdrop-blur-md" style={{ height: '56px' }}>
+                {([
+                    { tab: 'character', label: 'Character', Icon: User },
+                    { tab: 'chat',      label: 'Chat',      Icon: MessageSquare },
+                    { tab: 'setting',   label: 'Quests',    Icon: Map },
+                ] as const).map(({ tab, label, Icon }) => (
+                    <button
+                        key={tab}
+                        onClick={() => setMobilePanelTab(tab)}
+                        className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium uppercase tracking-widest transition-colors ${
+                            mobilePanelTab === tab
+                                ? 'text-[var(--accent,#fbbf24)]'
+                                : 'text-white/35 hover:text-white/60'
+                        }`}
+                    >
+                        <Icon size={18} strokeWidth={mobilePanelTab === tab ? 2 : 1.5} />
+                        {label}
+                    </button>
+                ))}
+            </nav>
+
+            {/* ── Panels ────────────────────────────────────────────────────── */}
+            <div className={`relative z-10 flex flex-1 w-full flex-col min-h-0 transition-[max-width] duration-300 ${
+                isFullscreen ? 'max-w-[1800px]' : 'xl:max-w-6xl'
             }`}>
-                <section className={`grid h-full w-full flex-1 min-h-0 overflow-hidden transition-[gap,grid-template-columns] duration-300 ${
+                {/* Mobile: single-panel view with bottom tab bar offset */}
+                <div className="xl:hidden flex flex-1 flex-col min-h-0 w-full pb-[56px]">
+                    <div className={`min-h-0 flex-1 flex-col overflow-hidden ${mobilePanelTab === 'character' ? 'flex' : 'hidden'}`}>
+                        <CharacterPanel />
+                    </div>
+                    <div className={`min-h-0 flex-1 flex-col overflow-hidden ${mobilePanelTab === 'chat' ? 'flex' : 'hidden'}`}>
+                        <ChatPanel
+                            messages={messages}
+                            handleSendOption={handleSendOption}
+                            input={input}
+                            setInput={setInput}
+                            inputRef={inputRef}
+                            handleSend={handleSend}
+                        />
+                    </div>
+                    <div className={`min-h-0 flex-1 flex-col overflow-hidden ${mobilePanelTab === 'setting' ? 'flex' : 'hidden'}`}>
+                        <SettingPanel />
+                    </div>
+                </div>
+
+                {/* Desktop: 3-column grid */}
+                <section className={`hidden xl:grid h-full w-full flex-1 min-h-0 overflow-hidden transition-[gap,grid-template-columns] duration-300 ${
                     isFullscreen ? 'gap-2 xl:grid-cols-[300px,minmax(0,1fr),260px]' : 'gap-4 xl:grid-cols-[320px,minmax(0,1fr),280px]'
                 }`}>
                     <div className={`flex min-h-0 flex-col overflow-hidden ${isFullscreen ? 'h-full' : 'h-[calc(100vh-10rem)]'}`}>

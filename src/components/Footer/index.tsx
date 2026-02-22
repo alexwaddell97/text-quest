@@ -36,9 +36,9 @@ export default function Footer() {
     const isPlayPage = pathname.startsWith('/play');
 
     useEffect(() => {
-        const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-        document.addEventListener('fullscreenchange', onChange);
-        return () => document.removeEventListener('fullscreenchange', onChange);
+        const onChange = (e: Event) => setIsFullscreen((e as CustomEvent<{ value: boolean }>).detail.value);
+        window.addEventListener('playfullscreenchange', onChange);
+        return () => window.removeEventListener('playfullscreenchange', onChange);
     }, []);
 
     if (isFullscreen) return null;

@@ -237,10 +237,10 @@ function ScrollableRow({ sessions, onTogglePin }: { sessions: ActiveSession[]; o
         ))}
       </div>
       {canScrollLeft && (
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#0f1118] via-[#0f1118]/90 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-[#04070C] via-[#04070C]/90 to-transparent" />
       )}
       {canScrollRight && (
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#0f1118] via-[#0f1118]/90 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-[#04070C] via-[#04070C]/90 to-transparent" />
       )}
       {canScrollLeft && (
         <button
@@ -437,7 +437,7 @@ export default function About() {
     >
       <div className="relative mx-auto h-full w-full max-w-6xl overflow-auto px-5 py-8 pb-36 md:px-10">
         <div className="flex flex-col gap-8 mb-8">
-          <div className="space-y-4">
+          <div id="onborda-hero" className="space-y-4">
             <p className="text-sm uppercase tracking-[0.35em] text-white/60">Interactive Fiction Studio</p>
             <h1 className="text-3xl md:text-4xl font-semibold leading-tight text-white">Infinite worlds, curated experiences, and smarter play.</h1>
             <p className="text-white/70 max-w-3xl">Browse featured settings, filter by genre, and jump straight into a session. Everything is tuned for immersive, multi-system play.</p>
@@ -476,7 +476,7 @@ export default function About() {
                 <span className="text-sm text-white/60">{debouncedSearch ? `Results for "${debouncedSearch}"` : 'Sorted by most voted'}</span>
               </div>
               <div className="flex flex-col gap-3 md:flex-row md:items-end">
-                <div className="relative w-full md:w-[220px] rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition hover:border-white/30 focus-within:border-white/30 focus-within:ring-2 focus-within:ring-rose-400/60">
+                <div id="onborda-search" className="relative w-full md:w-[220px] rounded-2xl border border-white/10 bg-white/5 px-4 py-3 transition hover:border-white/30 focus-within:border-white/30 focus-within:ring-2 focus-within:ring-rose-400/60">
                   <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Search</p>
                   <div className="relative mt-1 flex items-center">
                     <span className="pointer-events-none mr-2 shrink-0 text-white/40">
@@ -505,18 +505,20 @@ export default function About() {
                     )}
                   </div>
                 </div>
-                <CustomSelect
-                  label="Genre"
-                  options={genreOptions}
-                  value={selectedGenre}
-                  onChange={handleGenreChange}
-                  placeholder="All Genres"
-                  containerClassName="w-full min-w-0 md:w-auto md:min-w-[180px]"
-                />
+                <div id="onborda-genre-filter" className="w-full min-w-0 md:w-auto md:min-w-[180px]">
+                  <CustomSelect
+                    label="Genre"
+                    options={genreOptions}
+                    value={selectedGenre}
+                    onChange={handleGenreChange}
+                    placeholder="All Genres"
+                    containerClassName="w-full"
+                  />
+                </div>
               </div>
             </div>
             <AnimatePresence>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+              <div id="onborda-worlds-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
                 {(isInitialLoading ? gridSkeletons : settings).map((setting: any, index) => (
                   isInitialLoading ? (
                     <SettingCardSkeleton key={`grid-skeleton-${index}`} />

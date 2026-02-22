@@ -215,7 +215,7 @@ const GENRE_KEYWORDS: { archetype: string; keywords: string[] }[] = [
 // Derive an archetype from a setting's genre string and name
 // ─────────────────────────────────────────────────────────────────────────────
 
-function detectArchetype(setting: Setting): string {
+export function detectArchetype(setting: Setting): string {
     const corpus = [(Array.isArray(setting.genres) ? setting.genres.join(' ') : ''), setting.name, setting.description]
         .join(' ')
         .toLowerCase();
