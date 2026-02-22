@@ -114,6 +114,7 @@ export default function AccountPage() {
 
   if (!session) return null;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { name, email, image, votes = [], achievements = [], friends = [] } = session.user as any;
 
   return (

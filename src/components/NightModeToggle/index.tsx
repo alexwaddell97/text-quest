@@ -1,8 +1,7 @@
-import { motion } from "framer-motion";
 import { useTheme } from '@/context'; // Adjust the import path as necessary
 
-export default function NightModeToggle({ children, onClick }: any) {
-    const { theme } = useTheme();
+export default function NightModeToggle() {
+    useTheme();
 
     return (
       <label>

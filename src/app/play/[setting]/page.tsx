@@ -176,7 +176,7 @@ export default function Play() {
                                                 '\", \"skill_options\"', '\",\"skill_options\"',
                                                 '\", \"item_options\"', '\",\"item_options\"',
                                             ].map(m => raw.lastIndexOf(m)).filter(i => i > oq);
-                                            let eq = ends.length ? Math.min(...ends) : raw.lastIndexOf('"}');
+                                            const eq = ends.length ? Math.min(...ends) : raw.lastIndexOf('"}');
                                             if (eq > oq) { const n = raw.slice(oq + 1, eq); if (n.length > 5) return n; }
                                         }
                                     }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, InventoryChange } from '@/types';
 import Markdown from 'marked-react';
+import type { CustomReactRenderer } from 'marked-react';
 import { motion } from 'framer-motion';
 import { BookOpen } from 'lucide-react';
 import { useGameContext } from '@/context/gameContext';
@@ -8,7 +9,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import JournalModal from '@/components/GameScreen/Modals/JournalModal';
 
 // Custom renderer for GM narrative — breaks the wall of text into readable chunks
-const gmRenderer = {
+const gmRenderer: CustomReactRenderer = {
     paragraph(children: React.ReactNode) {
         return <p className="mb-3 last:mb-0 leading-[1.75] text-white/80">{children}</p>;
     },
@@ -266,7 +267,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                             <>
                                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/35">Gamemaster</div>
                                 <div className="text-sm">
-                                    <Markdown renderer={gmRenderer as any}>{message.text.replace(/\*\*\*\*([^*]+)\*\*\*\*/g, '').trim()}</Markdown>
+                                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                    <Markdown renderer={gmRenderer}>{message.text.replace(/\*\*\*\*([^*]+)\*\*\*\*/g, '').trim()}</Markdown>
                                 </div>
                                 {(() => {
                                     // Use structured options when available (new sessions);

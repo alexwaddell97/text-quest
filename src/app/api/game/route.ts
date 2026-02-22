@@ -511,7 +511,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const isGuest = !character.user_id;
     const isValidObjectId = (v: unknown): v is string => typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
 
-    let session: { _id: any; messages: { role: string; content: string }[] } | null = null;
+    let session: { _id: unknown; messages: { role: string; content: string }[] } | null = null;
     let newGameId = gameId;
 
     // Chronicle and world facts — loaded per-session and kept in sync

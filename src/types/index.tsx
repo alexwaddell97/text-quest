@@ -35,6 +35,7 @@ export interface Setting {
     major_locations: { name: string; description: string }[];
     rules: { rule: string; description: string }[];
     cover_image: string;
+    votes?: number;
     /** Optional per-setting visual theme; falls back to a derived theme if absent */
     theme?: SettingTheme;
 }

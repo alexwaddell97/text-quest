@@ -1,13 +1,17 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useTheme } from '@/context';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useSession } from "next-auth/react";
+import { Setting } from '@/types';
 
-export default function SettingCard({ setting, onClick }: any) {
-    const { theme } = useTheme();
+interface SettingCardProps {
+    setting: Setting;
+    onClick?: () => void;
+}
+
+export default function SettingCard({ setting, onClick }: SettingCardProps) {
     const [liked, setLiked] = useState(false);
     const [voteCount, setVoteCount] = useState<number>(setting?.votes ?? 0);
     const [isVoting, setIsVoting] = useState(false);
@@ -35,7 +39,7 @@ export default function SettingCard({ setting, onClick }: any) {
 
     useEffect(() => {
         if (session?.user && session.user.votes) {
-            const hasVoted = session.user.votes.some((vote: any) => vote === setting._id);
+            const hasVoted = session.user.votes.some((vote: string) => vote === setting._id);
             setLiked(hasVoted);
         }
     }, [session, setting._id]);
@@ -119,7 +123,7 @@ export default function SettingCard({ setting, onClick }: any) {
                                 ? 'border-red-500/50 text-red-500'
                                 : 'border-white/20 text-white/70 hover:border-white/50 hover:text-white'
                         } ${isVoting ? 'opacity-60' : ''} ${!session ? 'pointer-events-none' : ''}`}
-                        onClick={session ? (e) => { e.stopPropagation(); handleLikeClick(e as any); } : undefined}
+                        onClick={session ? (e) => { e.stopPropagation(); handleLikeClick(e as React.MouseEvent<HTMLButtonElement>); } : undefined}
                         disabled={isVoting}
                         aria-label="Like"
                     >
@@ -245,7 +249,7 @@ export default function SettingCard({ setting, onClick }: any) {
                             <div>
                                 <p className="text-[10px] uppercase tracking-[0.35em] text-white/40">Key Themes</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                    {setting.key_themes.map((t: any, i: number) => (
+                                    {setting.key_themes.map((t, i: number) => (
                                         <span key={i} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/70">
                                             {t.theme ?? t}
                                         </span>
@@ -258,7 +262,7 @@ export default function SettingCard({ setting, onClick }: any) {
                             <div>
                                 <p className="text-[10px] uppercase tracking-[0.35em] text-white/40">Locations</p>
                                 <div className="mt-2 grid grid-cols-2 gap-2">
-                                    {setting.major_locations.map((loc: any, i: number) => (
+                                    {setting.major_locations.map((loc, i: number) => (
                                         <div key={i} className="rounded-2xl border border-white/8 bg-white/3 px-3 py-2">
                                             <p className="text-xs font-semibold text-white leading-snug">{loc.name}</p>
                                             {loc.description && <p className="mt-0.5 text-[10px] leading-snug text-white/45 line-clamp-2">{loc.description}</p>}
@@ -272,7 +276,7 @@ export default function SettingCard({ setting, onClick }: any) {
                             <div>
                                 <p className="text-[10px] uppercase tracking-[0.35em] text-white/40">Factions</p>
                                 <div className="mt-2 grid grid-cols-2 gap-2">
-                                    {setting.factions.map((f: any, i: number) => (
+                                    {setting.factions.map((f, i: number) => (
                                         <div key={i} className="rounded-2xl border border-white/8 bg-white/3 px-3 py-2">
                                             <p className="text-xs font-semibold text-white leading-snug">{f.name}</p>
                                             {f.description && <p className="mt-0.5 text-[10px] leading-snug text-white/45 line-clamp-2">{f.description}</p>}
@@ -286,7 +290,7 @@ export default function SettingCard({ setting, onClick }: any) {
                             <div>
                                 <p className="text-[10px] uppercase tracking-[0.35em] text-white/40">World Rules</p>
                                 <div className="mt-2 flex flex-wrap gap-1.5">
-                                    {setting.rules.map((r: any, i: number) => (
+                                    {setting.rules.map((r, i: number) => (
                                         <span key={i} title={r.description} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/65 cursor-default">
                                             {r.rule ?? r}
                                         </span>

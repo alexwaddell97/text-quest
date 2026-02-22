@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json(JSON.parse(JSON.stringify(setting)));
     } else {
-        const query: any = {};
+        const query: Record<string, unknown> = {};
         if (genre) {
             query.genres = genre;
         }
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
         }
 
         const skip = (page - 1) * limit;
-        let sortOption: any = {};
+        const sortOption: Record<string, unknown> = {};
 
         if (sort === 'most-voted') {
             sortOption.votes = -1;

@@ -9,9 +9,9 @@ export async function POST(request: Request): Promise<NextResponse> {
             return NextResponse.json({ error: 'Image generation was rejected or failed. Please try again.' });
         }
         return NextResponse.json({ imageUrl });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error generating character image:', error);
-        return NextResponse.json({ error: error?.message ?? 'Failed to generate image' });
+        return NextResponse.json({ error: (error as Error)?.message ?? 'Failed to generate image' });
     }
 }
 

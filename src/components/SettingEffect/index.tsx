@@ -128,7 +128,6 @@ function DragonEffect({ accent, accentStrong }: { accent: string; accentStrong: 
         if (!ctx) return;
 
         let animId: number;
-        let t = 0;
         const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
         // ── Fireflies ────────────────────────────────────────────────────────
@@ -302,7 +301,7 @@ function DragonEffect({ accent, accentStrong }: { accent: string; accentStrong: 
 // Fantasy — Fireflies (standalone, kept for direct use if needed)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function FirefliesEffect({ accent, accentStrong }: { accent: string; accentStrong: string }) {
+function _FirefliesEffect({ accent, accentStrong }: { accent: string; accentStrong: string }) {
     const ref = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
@@ -486,7 +485,7 @@ function StarfieldEffect() {
 
         let stars: Star[] = [];
         let shooter: Shooter | null = null;
-        let planets: PlanetDef[] = GENERATED_PLANETS;
+        const planets: PlanetDef[] = GENERATED_PLANETS;
 
         const init = () => {
             canvas.width  = canvas.offsetWidth;
@@ -1346,7 +1345,7 @@ function PipBoyEffect() {
 
         let animId: number;
         let sweepY   = -1;          // scan bar Y position (-1 = idle)
-        let sweepDir = 1;
+        const sweepDir = 1;
         let flickerTimer = 0;
         let flickerAlpha = 0;
 
@@ -2169,7 +2168,7 @@ function HarryPotterEffect() {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        let W = 0, H = 0, raf = 0, frame = 0;
+        let W = 0, H = 0, raf = 0;
 
         const rnd  = (a: number, b: number) => a + Math.random() * (b - a);
         const rndI = (a: number, b: number) => Math.floor(rnd(a, b));
@@ -2369,10 +2368,7 @@ function HarryPotterEffect() {
         resize();
 
         const tick = () => {
-            frame++;
             ctx.clearRect(0, 0, W, H);
-
-            // ── Update + draw candles ──────────────────────────────────────
             for (let i = 0; i < candles.length; i++) {
                 const c = candles[i];
                 c.flamePhase += 0.09;

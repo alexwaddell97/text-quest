@@ -60,7 +60,6 @@ const CharacterPanel: React.FC = () => {
     const [showCreateCharacterModal, setShowCreateCharacterModal] = useState(false);
     const [loading, setLoading] = useState(true);
     const { data: session } = useSession();
-    const isAuthenticated = Boolean(session?.user?.id);
     const hasSelectedSetting = Boolean(setting?._id);
     const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null);
     const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);

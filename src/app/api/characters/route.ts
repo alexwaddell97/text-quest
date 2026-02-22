@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const itemsCollection = db.collection('items');
     const sessionsCollection = db.collection('sessions');
 
-    const query: any = {};
+    const query: Record<string, unknown> = {};
     if (characterId) {
         query._id = new ObjectId(characterId);
     }
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
 
         // Fetch items for each character's inventory
         const charactersWithInventory = await Promise.all(
-            characters.map(async (character: any) => {
+            characters.map(async (character: Record<string, unknown>) => {
                 const inventoryItems = await Promise.all(
                     character.inventory.map(async (item: { item_id: string; quantity: number }) => {
                         const inventoryItem = await itemsCollection.findOne({ _id: new ObjectId(item.item_id) });

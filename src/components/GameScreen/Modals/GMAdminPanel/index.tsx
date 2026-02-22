@@ -6,15 +6,15 @@ import { useSession } from 'next-auth/react';
 import { useGameContext } from '@/context/gameContext';
 import { applyGuestInventoryChanges, applyGuestQuestChanges, applyGuestXpAndLevelUp } from '@/utils/guestCharacters';
 import { getSettingTheme, deriveThemeFromSetting } from '@/utils/settingTheme';
-import { QuestChange, SettingTheme } from '@/types';
-import { X, Package, Coins, Zap, ScrollText, ChevronRight, Plus, Trash2, Palette } from 'lucide-react';
+import { Character, InventoryChange, QuestChange, SettingTheme } from '@/types';
+import { X, Package, Coins, Zap, ScrollText, Plus, Trash2, Palette } from 'lucide-react';
 
 type Tab = 'items' | 'currency' | 'xp' | 'quests' | 'theme';
 
 interface GMAdminPanelProps {
     isOpen: boolean;
     onClose: () => void;
-    onCharacterUpdate: (updater: (prev: any) => any) => void;
+    onCharacterUpdate: (updater: (prev: Character) => Character) => void;
     onLevelUp: (data: { xpGain: number; newLevel: number; stats: Record<string, number> }) => void;
 }
 
@@ -121,7 +121,7 @@ export const GMAdminPanel: React.FC<GMAdminPanelProps> = ({ isOpen, onClose, onC
     const isGuest = !session?.user?.id;
 
     // ── Helpers ────────────────────────────────────────────────────────────
-    const applyInventory = async (changes: any[], currencyDelta = 0) => {
+    const applyInventory = async (changes: InventoryChange[], currencyDelta = 0) => {
         if (!character?._id) return;
         if (isGuest) {
             const updated = applyGuestInventoryChanges(character._id, changes, currencyDelta);
@@ -133,7 +133,7 @@ export const GMAdminPanel: React.FC<GMAdminPanelProps> = ({ isOpen, onClose, onC
                 body: JSON.stringify({ characterId: character._id, changes, currencyDelta }),
             });
             const data = await res.json();
-            onCharacterUpdate((prev: any) => ({
+            onCharacterUpdate((prev: Character) => ({
                 ...prev,
                 ...(data.inventory ? { inventory: data.inventory } : {}),
                 ...(typeof data.currency === 'number' ? { currency: data.currency } : {}),
@@ -166,7 +166,7 @@ export const GMAdminPanel: React.FC<GMAdminPanelProps> = ({ isOpen, onClose, onC
                 body: JSON.stringify({ characterId: character._id, xpGain }),
             });
             const data = await res.json();
-            onCharacterUpdate((prev: any) => ({ ...prev, xp: data.xp, level: data.level, stats: data.stats }));
+            onCharacterUpdate((prev: Character) => ({ ...prev, xp: data.xp, level: data.level, stats: data.stats }));
         }
     };
 
@@ -174,7 +174,7 @@ export const GMAdminPanel: React.FC<GMAdminPanelProps> = ({ isOpen, onClose, onC
         if (!character?._id) return;
         if (isGuest) {
             const updated = applyGuestQuestChanges(character._id, changes);
-            if (updated) onCharacterUpdate((prev: any) => ({ ...prev, quests: updated.quests }));
+            if (updated) onCharacterUpdate((prev: Character) => ({ ...prev, quests: updated.quests }));
         } else {
             const res = await fetch('/api/characters/quests', {
                 method: 'PATCH',
@@ -182,7 +182,7 @@ export const GMAdminPanel: React.FC<GMAdminPanelProps> = ({ isOpen, onClose, onC
                 body: JSON.stringify({ characterId: character._id, changes }),
             });
             const data = await res.json();
-            if (data.quests) onCharacterUpdate((prev: any) => ({ ...prev, quests: data.quests }));
+            if (data.quests) onCharacterUpdate((prev: Character) => ({ ...prev, quests: data.quests }));
         }
     };
 
@@ -311,7 +311,7 @@ export const GMAdminPanel: React.FC<GMAdminPanelProps> = ({ isOpen, onClose, onC
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
                                             <label className={labelClass}>Rarity</label>
-                                            <select className={inputClass} value={itemRarity} onChange={e => setItemRarity(e.target.value as any)}>
+                                            <select className={inputClass} value={itemRarity} onChange={e => setItemRarity(e.target.value as typeof RARITIES[number])}>
                                                 {RARITIES.map(r => <option key={r} value={r}>{r}</option>)}
                                             </select>
                                         </div>

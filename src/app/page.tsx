@@ -4,7 +4,7 @@ import { AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { deriveThemeFromSetting, getSettingTheme } from "@/utils/settingTheme";
+import { getSettingTheme } from "@/utils/settingTheme";
 
 const PAGE_SIZE = 12;
 
@@ -147,7 +147,7 @@ function ContinueCard({ s, onTogglePin }: { s: ActiveSession; onTogglePin: (id: 
     genres: s.setting_genres ?? [],
     description: s.setting_description ?? '',
     theme: s.setting_theme,
-  } as any);
+  } as unknown as import('@/types').Setting);
 
   return (
     <Link
@@ -306,7 +306,7 @@ export default function About() {
     setSessionsLoading(true);
     fetch(`/api/characters?userId=${userId}`)
       .then((r) => r.json())
-      .then(async (chars: any[]) => {
+      .then(async (chars: Record<string, unknown>[]) => {
         const withSession = chars.filter((c) => c.session_id);
         const withNames = await Promise.all(
           withSession.map(async (c) => {
@@ -331,7 +331,7 @@ export default function About() {
       .catch(() => {})
       .finally(() => setSessionsLoading(false));
   }, [session?.user?.id]);
-  const [settings, setSettings] = useState<any[]>([]);
+  const [settings, setSettings] = useState<import('@/types').Setting[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -519,7 +519,7 @@ export default function About() {
             </div>
             <AnimatePresence>
               <div id="onborda-worlds-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                {(isInitialLoading ? gridSkeletons : settings).map((setting: any, index) => (
+                {(isInitialLoading ? gridSkeletons : settings).map((setting: import('@/types').Setting, index) => (
                   isInitialLoading ? (
                     <SettingCardSkeleton key={`grid-skeleton-${index}`} />
                   ) : (

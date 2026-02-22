@@ -1,4 +1,4 @@
-import { Character, InventoryChange, Quest, QuestChange } from '@/types';
+import { Character, InventoryChange, QuestChange } from '@/types';
 import { applyQuestChanges } from '@/utils/questUtils';
 
 const STORAGE_KEY = 'tq_guest_characters';

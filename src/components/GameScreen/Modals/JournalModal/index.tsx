@@ -106,7 +106,7 @@ const JournalModal: React.FC<JournalModalProps> = ({ isOpen, onClose, chronicle,
                             {chronicle.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-16 text-center">
                                     <BookOpen size={32} className="mb-3 text-white/15" />
-                                    <p className="text-sm text-white/30">Your adventure hasn't been recorded yet.</p>
+                                    <p className="text-sm text-white/30">Your adventure hasn&apos;t been recorded yet.</p>
                                     <p className="mt-1 text-xs text-white/20">The journal fills as your story unfolds.</p>
                                 </div>
                             ) : (

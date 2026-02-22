@@ -47,12 +47,13 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
 
         await sessionsCollection.updateOne(query, {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             $push: { messages: systemMessage } as any,
         });
 
         return NextResponse.json({ ok: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('inject route error:', err);
-        return NextResponse.json({ error: err?.message ?? 'Failed to inject message' }, { status: 500 });
+        return NextResponse.json({ error: (err as Error)?.message ?? 'Failed to inject message' }, { status: 500 });
     }
 }

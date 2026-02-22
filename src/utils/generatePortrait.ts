@@ -26,9 +26,9 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
             setting?.name ? `Setting name: ${setting.name}` : null,
             setting?.genres?.length ? `Genre: ${setting.genres.join(', ')}` : null,
             setting?.system_message ? `Setting description: ${setting.system_message.slice(0, 400)}` : null,
-            setting?.key_themes?.length ? `Themes: ${setting.key_themes.slice(0, 4).map((t: any) => t.theme ?? t).join(', ')}` : null,
-            setting?.major_locations ? `Locations: ${Object.values(setting.major_locations).slice(0, 3).map((l: any) => l.name).join(', ')}` : null,
-            setting?.rules?.length ? `World rules: ${setting.rules.slice(0, 2).map((r: any) => r.rule ?? r).join(', ')}` : null,
+            setting?.key_themes?.length ? `Themes: ${setting.key_themes.slice(0, 4).map((t) => (typeof t === 'string' ? t : t.theme)).join(', ')}` : null,
+            setting?.major_locations ? `Locations: ${Object.values(setting.major_locations).slice(0, 3).map((l) => l.name).join(', ')}` : null,
+            setting?.rules?.length ? `World rules: ${setting.rules.slice(0, 2).map((r) => (typeof r === 'string' ? r : r.rule)).join(', ')}` : null,
         ].filter(Boolean).join('\n');
 
         // Infer gender from description/backstory pronouns so the image model gets an unambiguous subject line
@@ -95,6 +95,7 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
                 },
             ],
             max_completion_tokens: 700,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
 
         const rawSummary = summaryCompletion.choices[0]?.message?.content?.trim() ?? '';
@@ -107,7 +108,7 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
         const locationBackground = locationMatch?.[1]?.trim() ?? '';
         const artStyle = artStyleMatch?.[1]?.trim() || 'cinematic photorealistic portrait, dramatic lighting, sharp detail, shallow depth of field';
 
-        const settingThemes = setting?.key_themes?.slice(0, 3).map((t: any) => t.theme ?? t).join(', ') ?? '';
+        const settingThemes = setting?.key_themes?.slice(0, 3).map((t) => (typeof t === 'string' ? t : t.theme)).join(', ') ?? '';
 
         // Keep the genre label safe (avoid words that trigger moderation on their own)
         const safeGenre = ((setting?.genres?.length ? setting.genres.join(', ') : null) ?? 'fantasy').replace(/horror|gore|adult|explicit/gi, 'atmospheric');
@@ -141,8 +142,9 @@ export async function generatePortrait(input: CharacterImageInput): Promise<stri
                 prompt: p,
                 n: 1,
                 size: '1024x1024',
-                quality: 'medium' as any,
-            });
+                quality: 'medium',
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any);
             return res.data[0]?.b64_json ?? null;
         };
 

@@ -95,8 +95,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
         );
 
         return NextResponse.json({ inventory: updatedItems.filter(Boolean), ...(newCurrency !== undefined ? { currency: newCurrency } : {}) });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error updating inventory:', error);
-        return NextResponse.json({ error: error?.message ?? 'Failed to update inventory' }, { status: 500 });
+        return NextResponse.json({ error: (error as Error)?.message ?? 'Failed to update inventory' }, { status: 500 });
     }
 }

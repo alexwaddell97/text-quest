@@ -48,8 +48,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
             stats,
             leveledUp,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error updating XP:', error);
-        return NextResponse.json({ error: error?.message ?? 'Failed to update XP' }, { status: 500 });
+        return NextResponse.json({ error: (error as Error)?.message ?? 'Failed to update XP' }, { status: 500 });
     }
 }

@@ -61,9 +61,7 @@ const CreateCharacterModal: React.FC<CreateCharacterModalProps> = ({ onClose }) 
     const [imageError, setImageError] = useState(false);
     const { data: session } = useSession();
     const panelBase = 'border border-white/10 bg-[var(--panel)] text-white';
-    const inputBase = 'border border-white/10 bg-white/5 text-white placeholder-white/40 focus-visible:ring-[var(--accent)]/60';
     const subtleText = 'text-white/70';
-    const badgeBase = 'bg-white/10 text-white/80';
     const ghostButtonBase = 'border border-white/20 text-white/80 hover:border-white hover:text-white';
     const canGeneratePortrait = characterName.trim().length > 0 && characterRace.trim().length > 0 && characterDescription.trim().length > 0 && characterBackstory.trim().length > 0;
 
@@ -143,7 +141,7 @@ const CreateCharacterModal: React.FC<CreateCharacterModalProps> = ({ onClose }) 
             const sortedStats = [...statEntries].sort((a, b) => b[1] - a[1]);
             setPrimaryStat(sortedStats[0][0]);
             setWeakStat(sortedStats[sortedStats.length - 1][0]);
-            const aiInventory: StartingItem[] = (data.character.starting_inventory ?? []).map((item: any) => ({
+            const aiInventory: StartingItem[] = (data.character.starting_inventory ?? []).map((item: { name?: string; description?: string; rarity?: string; quantity?: number }) => ({
                 name: item.name ?? '',
                 description: item.description ?? '',
                 rarity: item.rarity === 'uncommon' ? 'uncommon' : 'common',
