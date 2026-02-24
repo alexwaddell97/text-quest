@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, InventoryChange } from '@/types';
 import Markdown from 'marked-react';
-import type { CustomReactRenderer } from 'marked-react';
 import { motion } from 'framer-motion';
 import { BookOpen } from 'lucide-react';
 import { useGameContext } from '@/context/gameContext';
@@ -9,7 +8,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import JournalModal from '@/components/GameScreen/Modals/JournalModal';
 
 // Custom renderer for GM narrative — breaks the wall of text into readable chunks
-const gmRenderer: CustomReactRenderer = {
+const gmRenderer = {
     paragraph(children: React.ReactNode) {
         return <p className="mb-3 last:mb-0 leading-[1.75] text-white/80">{children}</p>;
     },

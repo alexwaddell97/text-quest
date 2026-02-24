@@ -47,7 +47,7 @@ export async function GET(request: Request) {
         }
 
         const skip = (page - 1) * limit;
-        const sortOption: Record<string, unknown> = {};
+        const sortOption: Record<string, 1 | -1> = {};
 
         if (sort === 'most-voted') {
             sortOption.votes = -1;

@@ -285,7 +285,7 @@ const SettingPanel: React.FC = () => {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4">
                             <p className="text-xs uppercase tracking-[0.35em] text-white/60">World</p>
                             <h2 className="text-lg font-semibold">{setting.name}</h2>
-                            <p className="text-xs text-white/70">{(setting.genres ?? (setting.genre ? [setting.genre] : [])).join(' · ')}</p>
+                            <p className="text-xs text-white/70">{(setting.genres ?? []).join(' · ')}</p>
                         </div>
                     </div>
 

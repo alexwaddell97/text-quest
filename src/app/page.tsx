@@ -326,7 +326,7 @@ export default function About() {
             }
           })
         );
-        setActiveSessions(withNames);
+        setActiveSessions(withNames as ActiveSession[]);
       })
       .catch(() => {})
       .finally(() => setSessionsLoading(false));
@@ -519,11 +519,11 @@ export default function About() {
             </div>
             <AnimatePresence>
               <div id="onborda-worlds-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-                {(isInitialLoading ? gridSkeletons : settings).map((setting: import('@/types').Setting, index) => (
+                {(isInitialLoading ? gridSkeletons : settings as unknown[]).map((setting, index) => (
                   isInitialLoading ? (
                     <SettingCardSkeleton key={`grid-skeleton-${index}`} />
                   ) : (
-                    <SettingCard setting={setting} key={setting._id} onClick={() => {}} />
+                    <SettingCard setting={setting as import('@/types').Setting} key={(setting as import('@/types').Setting)._id} onClick={() => {}} />
                   )
                 ))}
               </div>

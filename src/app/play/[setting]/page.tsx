@@ -566,7 +566,7 @@ export default function Play() {
             <GMAdminPanel
                 isOpen={isAdminOpen}
                 onClose={() => setIsAdminOpen(false)}
-                onCharacterUpdate={setCharacter}
+                onCharacterUpdate={(updater) => setCharacter(prev => prev ? updater(prev) : prev)}
                 onLevelUp={setPendingLevelUp}
             />
 

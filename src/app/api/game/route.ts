@@ -511,7 +511,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const isGuest = !character.user_id;
     const isValidObjectId = (v: unknown): v is string => typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
 
-    let session: { _id: unknown; messages: { role: string; content: string }[] } | null = null;
+    let session: { _id: ObjectId | string; messages: { role: string; content: string }[] } | null = null;
     let newGameId = gameId;
 
     // Chronicle and world facts — loaded per-session and kept in sync
@@ -630,7 +630,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                     chatHistoryStore[String(session!._id)] = session!.messages;
                 } else {
                     await sessionsCollection.updateOne(
-                        { _id: session!._id },
+                        { _id: session!._id as ObjectId },
                         { $set: { messages: session!.messages } },
                     );
                 }
@@ -663,7 +663,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                         chatHistoryStore[String(session!._id)] = session!.messages;
                     } else {
                         await sessionsCollection.updateOne(
-                            { _id: session!._id },
+                            { _id: session!._id as ObjectId },
                             { $set: { messages: session!.messages } },
                         );
                     }
@@ -1074,7 +1074,7 @@ export async function POST(request: Request): Promise<NextResponse> {
                 worldFactsStore[key] = factsRecord;
             } else {
                 await sessionsCollection.updateOne(
-                    { _id: session!._id },
+                    { _id: session!._id as ObjectId },
                     { $set: { chronicle, world_facts: factsRecord } },
                 );
             }
@@ -1091,7 +1091,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         if (isGuest) {
             chatHistoryStore[String(session!._id)] = session!.messages;
         } else {
-            await sessionsCollection.updateOne({ _id: session!._id }, { $set: { messages: session!.messages, last_played: new Date() } });
+            await sessionsCollection.updateOne({ _id: session!._id as ObjectId }, { $set: { messages: session!.messages, last_played: new Date() } });
         }
 
         return NextResponse.json({

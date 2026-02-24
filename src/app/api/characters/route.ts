@@ -82,7 +82,7 @@ export async function GET(request: Request) {
                 );
 
                 // Fetch session for the character
-                const session = await sessionsCollection.findOne({ character_id: new ObjectId(character._id) });
+                const session = await sessionsCollection.findOne({ character_id: new ObjectId(character._id as string) });
 
                 return JSON.parse(JSON.stringify({
                     ...character,

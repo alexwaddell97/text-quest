@@ -238,7 +238,7 @@ export default function SettingCard({ setting, onClick }: SettingCardProps) {
 
                     <div className="space-y-5 px-6 pb-6 pt-4">
                         <div>
-                            <div className="flex flex-wrap gap-1.5 mb-1">{(setting.genres ?? (setting.genre ? [setting.genre] : [])).map((g: string) => (<span key={g} className="rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.3em] text-white/50">{g}</span>))}</div>
+                            <div className="flex flex-wrap gap-1.5 mb-1">{(setting.genres ?? []).map((g: string) => (<span key={g} className="rounded-full border border-white/15 bg-white/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.3em] text-white/50">{g}</span>))}</div>
                             <h2 className="mt-0.5 text-xl font-semibold">{setting.name}</h2>
                             {setting.description && (
                                 <p className="mt-2 text-sm leading-relaxed text-white/65">{setting.description}</p>
