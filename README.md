@@ -1,62 +1,187 @@
-# Roleplaying Realm
+<div align="center">
 
-Roleplaying Realm is a setting-agnostic, text-based adventure game platform that leverages the power of the GPT API to create immersive and dynamic storytelling experiences.
+```
+██████╗  ██████╗ ██╗     ███████╗██████╗ ██╗      █████╗ ██╗   ██╗██╗███╗   ██╗ ██████╗
+██╔══██╗██╔═══██╗██║     ██╔════╝██╔══██╗██║     ██╔══██╗╚██╗ ██╔╝██║████╗  ██║██╔════╝
+██████╔╝██║   ██║██║     █████╗  ██████╔╝██║     ███████║ ╚████╔╝ ██║██╔██╗ ██║██║  ███╗
+██╔══██╗██║   ██║██║     ██╔══╝  ██╔═══╝ ██║     ██╔══██║  ╚██╔╝  ██║██║╚██╗██║██║   ██║
+██║  ██║╚██████╔╝███████╗███████╗██║     ███████╗██║  ██║   ██║   ██║██║ ╚████║╚██████╔╝
+╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═══╝ ╚═════╝
+
+██████╗ ███████╗ █████╗ ██╗     ███╗   ███╗
+██╔══██╗██╔════╝██╔══██╗██║     ████╗ ████║
+██████╔╝█████╗  ███████║██║     ██╔████╔██║
+██╔══██╗██╔══╝  ██╔══██║██║     ██║╚██╔╝██║
+██║  ██║███████╗██║  ██║███████╗██║ ╚═╝ ██║
+╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝
+```
+
+### *An AI-powered, setting-agnostic text adventure platform*
+
+![Version](https://img.shields.io/badge/version-0.5.0-blueviolet?style=flat-square)
+![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript)
+![Tailwind](https://img.shields.io/badge/Tailwind-CSS-38bdf8?style=flat-square&logo=tailwindcss)
+![MongoDB](https://img.shields.io/badge/MongoDB-6-47a248?style=flat-square&logo=mongodb)
+![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+
+</div>
+
+---
+
+## What is Roleplaying Realm?
+
+**Roleplaying Realm** is a text-based adventure game platform powered by the Claude & GPT APIs. Enter hand-crafted worlds or your own custom setting, build a character, and let the AI weave a dynamic story around every choice you make. No two playthroughs are the same.
+
+---
+
+## Features
+
+| Feature | Description |
+|---|---|
+| **Multiple Worlds** | Pre-built settings: WoW, Elder Scrolls, Fallout, Cyberpunk — or bring your own |
+| **AI Storytelling** | Claude & GPT APIs drive real-time, context-aware narrative generation |
+| **Character System** | Create and manage characters with inventories and persistent state |
+| **Setting Effects** | Each world has unique visual and gameplay effects |
+| **Onboarding Tour** | First-time player guidance built in |
+| **Dark Mode** | Night mode toggle for late-night questing |
+| **Authentication** | Secure login via NextAuth |
+| **Cloud Storage** | Save state and assets via Vercel Blob |
+
+---
+
+## Tech Stack
+
+```
+Frontend          Next.js 14 · React 18 · TypeScript 5
+Styling           Tailwind CSS · DaisyUI · Framer Motion
+AI / LLM          Anthropic Claude SDK · OpenAI SDK
+Database          MongoDB 6
+Auth              NextAuth 4
+Storage           Vercel Blob
+Icons             Lucide React
+Markdown          Marked · Marked-React
+Onboarding        Onborda
+```
+
+---
 
 ## Getting Started
 
-First, clone the repository and install the dependencies:
+### Prerequisites
+
+- Node.js 18+
+- A MongoDB instance (local or Atlas)
+- An Anthropic API key and/or OpenAI API key
+
+### Installation
 
 ```bash
-git clone https://github.com/yourusername/Roleplaying Realm.git
-cd Roleplaying Realm
+# Clone the repository
+git clone https://github.com/yourusername/roleplaying-realm.git
+cd roleplaying-realm
+
+# Install dependencies
 npm install
-# or
-yarn install
 ```
 
-Then, run the development server:
+### Environment Variables
+
+Create a `.env.local` file in the root:
+
+```env
+MONGODB_URI=your_mongodb_connection_string
+
+ANTHROPIC_API_KEY=your_anthropic_api_key
+OPENAI_API_KEY=your_openai_api_key
+
+NEXTAUTH_SECRET=your_nextauth_secret
+NEXTAUTH_URL=http://localhost:3000
+
+BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
+```
+
+### Run Locally
 
 ```bash
 npm run dev
-# or
-yarn dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-## Learn More
+## Database Scripts
 
-To learn more about Roleplaying Realm and how to use it, take a look at the following resources:
+Seed and patch scripts are provided for initial data setup:
 
-- [Roleplaying Realm Documentation](https://yourdocumentationlink.com) - learn about the platform's features and API.
-- [GPT API Documentation](https://beta.openai.com/docs/) - learn about the GPT API used for generating text.
+```bash
+# Seed world themes
+npm run seed:themes
 
-## Deploy on Vercel
+# Seed game settings
+npm run seed:settings
 
-The easiest way to deploy your Roleplaying Realm app is to use the [Vercel Platform](https://vercel.com/new) from the creators of Next.js.
+# Migration & patch scripts
+npm run migrate:genres
+npm run patch:wow-theme
+npm run patch:elder-scrolls
+npm run patch:fallout
+npm run patch:cyberpunk
+```
 
-Check out our [deployment documentation](https://yourdeploymentdocumentationlink.com) for more details.
+---
+
+## Project Structure
+
+```
+src/
+├── app/                   # Next.js app router pages
+│   ├── play/              # Core game screen
+│   ├── account/           # User account management
+│   ├── how-it-works/      # Feature walkthrough page
+│   ├── login/             # Auth pages
+│   └── api/               # API routes (AI, auth, game state)
+├── components/            # Reusable UI components
+│   ├── GameScreen/        # Main game interface
+│   ├── SettingCard/       # World/theme selection cards
+│   ├── SettingEffect/     # Per-setting visual effects
+│   ├── Modal/             # Dialog components
+│   ├── OnboardingTour/    # First-time user flow
+│   └── ...
+├── lib/                   # Database clients & utilities
+├── types/                 # TypeScript type definitions
+├── utils/                 # Shared helper functions
+└── context/               # React context providers
+scripts/                   # DB seed & migration scripts
+```
+
+---
 
 ## Contributing
 
-If you would like to contribute to this project, please follow these steps:
+1. Fork the repository
+2. Create a feature branch — `git checkout -b feature/your-feature`
+3. Commit your changes — `git commit -m 'Add your feature'`
+4. Push to the branch — `git push origin feature/your-feature`
+5. Open a pull request
 
-1. Fork the repository.
-2. Create a new branch (`git checkout -b feature-branch`).
-3. Make your changes.
-4. Commit your changes (`git commit -m 'Add some feature'`).
-5. Push to the branch (`git push origin feature-branch`).
-6. Open a pull request.
+---
+
+## Deployment
+
+The easiest way to deploy is via [Vercel](https://vercel.com/new). Connect your repository, add your environment variables in the Vercel dashboard, and deploy.
+
+---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
 
-## Acknowledgements
+---
 
-- [Next.js](https://nextjs.org/)
-- [Vercel](https://vercel.com/)
-- [OpenAI](https://openai.com/)
-- [GitHub](https://github.com/)
+<div align="center">
+
+Built with Next.js · Powered by Claude & GPT · Deployed on Vercel
+
+</div>
