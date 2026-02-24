@@ -128,6 +128,7 @@ function DragonEffect({ accent, accentStrong }: { accent: string; accentStrong: 
         if (!ctx) return;
 
         let animId: number;
+        let t = 0;
         const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
         // ── Fireflies ────────────────────────────────────────────────────────
