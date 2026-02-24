@@ -65,7 +65,7 @@ export async function GET(request: Request) {
         const charactersWithInventory = await Promise.all(
             characters.map(async (character: Record<string, unknown>) => {
                 const inventoryItems = await Promise.all(
-                    character.inventory.map(async (item: { item_id: string; quantity: number }) => {
+                    (character.inventory as { item_id: string; quantity: number }[]).map(async (item: { item_id: string; quantity: number }) => {
                         const inventoryItem = await itemsCollection.findOne({ _id: new ObjectId(item.item_id) });
                         if (inventoryItem) {
                             return {
