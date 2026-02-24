@@ -7,6 +7,7 @@ import Providers from "./providers";
 import { getSession } from "@/auth";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import OnboardingTour from "@/components/OnboardingTour";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -89,11 +90,12 @@ export default async function RootLayout({
           <ThemeProvider>
             <div className={`flex w-full flex-col ${isImmersive ? "h-screen" : "min-h-screen"}`}>
               {!isImmersive && <Header />}
-              <main className={`flex-1 min-h-0 w-full ${(isImmersive || lockShell) ? "overflow-hidden" : ""}`}>
+              <OnboardingTour />
+              <main className={`flex-1 min-h-0 h-full w-full ${(isImmersive || lockShell) ? "overflow-hidden" : ""}`}>
                 {shouldBypassShell ? (
                   children
                 ) : (
-                  <div className="w-full">
+                  <div className="w-full h-full min-h-screen">
                     {children}
                   </div>
                 )}

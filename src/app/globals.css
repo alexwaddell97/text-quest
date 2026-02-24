@@ -13,6 +13,11 @@
   --accent-strong: #e2e8f0;
   --border: rgba(255, 255, 255, 0.09);
   --glow: rgba(148, 158, 181, 0.25);
+  --ambient-a: rgba(100, 80, 200, 0.15);
+  --ambient-b: rgba(200, 100, 50, 0.1);
+  --theme-btn: linear-gradient(135deg, #f43f5e 0%, #d97706 50%, #991b1b 100%);
+  --theme-player-bubble: linear-gradient(135deg, rgba(159,18,57,0.35) 0%, rgba(255,255,255,0.03) 100%);
+  --font-display: var(--font-space-grotesk);
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
@@ -37,9 +42,27 @@ body {
   color: var(--text);
   font-family: var(--font-manrope), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   letter-spacing: 0.01em;
+  min-height: 100%;
+}
+
+html {
+  height: 100%;
 }
 
 h1, h2, h3, h4 {
+  font-family: var(--font-display), var(--font-manrope), "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Within the play screen, headings and decorated text use the theme's display font */
+[data-play-screen] {
+  --font-display: inherit;
+}
+
+[data-play-screen] h1,
+[data-play-screen] h2,
+[data-play-screen] h3,
+[data-play-screen] h4,
+[data-play-screen] .font-display {
   font-family: var(--font-display), var(--font-manrope), "Helvetica Neue", Arial, sans-serif;
 }
 

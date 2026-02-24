@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
+import { ReactNode } from "react";
 
 
-export default function Button({children, onClick} : any) {
-
+export default function Button({children, onClick} : { children: ReactNode; onClick?: () => void }) {
     return (
         <motion.button onClick={onClick}
         initial={{ opacity: 0 }}

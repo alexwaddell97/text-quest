@@ -1,6 +1,7 @@
 "use client"
-import { useMemo, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -61,6 +62,7 @@ const LOGIN_PROVIDERS = [
 export default function Login() {
     const router = useRouter();
     const { data: session, status } = useSession();
+    const [signingIn, setSigningIn] = useState(false);
     const heroLabelClass = "text-white/60";
     const heroHeadingClass = "text-white";
     const heroBodyClass = "text-white/70";
@@ -94,10 +96,32 @@ export default function Login() {
         if (disabled) {
             return;
         }
-        signIn(providerId);
+        setSigningIn(true);
+        signIn(providerId, { callbackUrl: "/auth/loading" });
     };
 
+    const showLoader = signingIn;
+
     return (
+        <>
+        <AnimatePresence>
+            {showLoader && (
+                <motion.div
+                    key="auth-loader"
+                    className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 bg-[#070407]"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                >
+                    <div className="relative h-14 w-14">
+                        <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+                        <div className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-rose-400" />
+                    </div>
+                    <p className="text-sm tracking-widest uppercase text-white/50">Signing you in…</p>
+                </motion.div>
+            )}
+        </AnimatePresence>
         <div className={`min-h-screen w-full ${cardPalette.background} px-4 py-16`}>
             <div className={`mx-auto flex w-full max-w-6xl flex-col gap-12 rounded-[40px] border ${shellBorderClass} ${shellBackgroundClass} ${shellTextClass} px-6 py-10 backdrop-blur-xl md:px-12`}>
                 <div className="grid items-center gap-12 lg:grid-cols-[1.2fr_1fr]">
@@ -178,5 +202,6 @@ export default function Login() {
                 </div>
             </div>
         </div>
+        </>
     );
 }

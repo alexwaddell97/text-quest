@@ -46,7 +46,8 @@ const Modal: React.FC<ModalProps> = ({ isOpen: initialIsOpen, onClose, children,
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className={`relative mx-auto flex h-auto w-full max-h-[calc(100vh-2rem)] flex-col overflow-y-auto rounded-3xl border border-white/10 bg-gradient-to-b from-[#1f1f23] via-[#131316] to-[#050507] p-6 text-gray-100 shadow-2xl ${width ? width : 'max-w-lg'}`}
+                className={`relative mx-auto flex h-auto w-full max-h-[calc(100vh-2rem)] flex-col overflow-y-auto rounded-3xl border border-[var(--border)] p-6 text-[var(--text)] shadow-2xl ${width ? width : 'max-w-lg'}`}
+                style={{ background: 'linear-gradient(to bottom, var(--elevated), var(--panel), var(--bg))' }}
             >
                 <button
                     onClick={handleClose}
@@ -65,7 +66,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen: initialIsOpen, onClose, children,
                     />
                 </svg>
                 </button>
-                {title && <h2 className="text-lg font-semibold mb-4 text-white">{title}</h2>}
+                {title && <h2 className="text-lg font-semibold mb-4 text-[var(--text)]">{title}</h2>}
                 {children}
             </motion.div>
         </div>,

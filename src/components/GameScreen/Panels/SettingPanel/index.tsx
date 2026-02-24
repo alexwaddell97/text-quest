@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import { useGameContext } from '@/context/gameContext';
 import { Quest, QuestChange } from '@/types';
 import { applyGuestQuestChanges } from '@/utils/guestCharacters';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // ── Quest tree helpers ──────────────────────────────────────────────────────
 type QuestNode = Quest & { children: QuestNode[] };
@@ -185,6 +186,37 @@ const SettingPanel: React.FC = () => {
     const { data: authSession } = useSession();
     const [showDoneChains, setShowDoneChains] = useState(false);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
+    const prevQuestStatusesRef = useRef<Map<string, string>>(new Map());
+    const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<Set<string>>(new Set());
+
+    // Detect quests that just moved from active → completed
+    useEffect(() => {
+        const currentQuests = character?.quests ?? [];
+        const prevStatuses = prevQuestStatusesRef.current;
+        const newlyCompleted: string[] = [];
+        for (const q of currentQuests) {
+            if (prevStatuses.get(q.id) === 'active' && q.status === 'completed') {
+                newlyCompleted.push(q.id);
+            }
+        }
+        if (newlyCompleted.length > 0) {
+            setRecentlyCompletedIds((prev) => {
+                const next = new Set(prev);
+                newlyCompleted.forEach((id) => next.add(id));
+                return next;
+            });
+            newlyCompleted.forEach((id) => {
+                setTimeout(() => {
+                    setRecentlyCompletedIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(id);
+                        return next;
+                    });
+                }, 6000);
+            });
+        }
+        prevQuestStatusesRef.current = new Map(currentQuests.map((q) => [q.id, q.status]));
+    }, [character?.quests]);
 
     const cancelQuest = async (questId: string) => {
         if (!character || cancellingId) return;
@@ -234,14 +266,13 @@ const SettingPanel: React.FC = () => {
     const questTree = buildQuestTree(allQuests);
     const activeChains = questTree.filter(chainHasActive);
     const doneChains = questTree.filter((r) => !chainHasActive(r));
+    const recentlyCompletedRoots = doneChains.filter((root) =>
+        flattenChain(root).some((s) => recentlyCompletedIds.has(s.id))
+    );
     const totalActive = allQuests.filter((q) => q.status === 'active').length;
 
-    const keyThemes = setting?.key_themes?.slice(0, 2) ?? [];
-    const factions = setting?.factions?.slice(0, 2) ?? [];
-    const locations = setting?.major_locations?.slice(0, 2) ?? [];
-
     return (
-        <div className="flex h-[calc(100vh-10rem)] min-h-0 flex-col rounded-[28px] border border-white/10 bg-[rgba(23,23,25,0.96)] p-5 text-white shadow-[0_35px_120px_rgba(5,6,12,0.65)]">
+        <div className="flex h-full min-h-0 flex-col rounded-[28px] border border-white/10 bg-[var(--panel)] p-5 text-white shadow-[0_35px_120px_rgba(5,6,12,0.65)]">
             {setting ? (
                 <>
                     <div className="relative mb-5 h-40 overflow-hidden rounded-2xl border border-white/10">
@@ -254,7 +285,7 @@ const SettingPanel: React.FC = () => {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4">
                             <p className="text-xs uppercase tracking-[0.35em] text-white/60">World</p>
                             <h2 className="text-lg font-semibold">{setting.name}</h2>
-                            <p className="text-xs text-white/70">{setting.genre}</p>
+                            <p className="text-xs text-white/70">{(setting.genres ?? []).join(' · ')}</p>
                         </div>
                     </div>
 
@@ -265,7 +296,7 @@ const SettingPanel: React.FC = () => {
                             <div className="flex items-center justify-between">
                                 <p className="text-xs uppercase tracking-[0.35em] text-white/45">Objectives</p>
                                 {totalActive > 0 && (
-                                    <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-300">
+                                    <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent-strong)' }}>
                                         {totalActive} active
                                     </span>
                                 )}
@@ -278,6 +309,38 @@ const SettingPanel: React.FC = () => {
                                 </div>
                             ) : (
                                 <>
+                                    {/* Recently completed quest flash banners */}
+                                    <AnimatePresence>
+                                        {recentlyCompletedRoots.map((root) => {
+                                            const stages = flattenChain(root);
+                                            const lastStage = stages[stages.length - 1];
+                                            return (
+                                                <motion.div
+                                                    key={root.id}
+                                                    initial={{ opacity: 0, y: -10, scale: 0.97 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                                                    transition={{ type: 'spring', stiffness: 280, damping: 24 }}
+                                                    className="mt-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-950/50 via-emerald-900/10 to-transparent p-3 shadow-[0_0_24px_rgba(52,211,153,0.1)]"
+                                                >
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400/20 text-sm text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.35)]">
+                                                            ✓
+                                                        </span>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-emerald-400/70">Quest Complete</p>
+                                                            <p className="truncate text-sm font-semibold text-white/90">{lastStage.title}</p>
+                                                        </div>
+                                                    </div>
+                                                    {lastStage.reward_hint && (
+                                                        <p className="mt-1.5 border-t border-emerald-400/10 pt-1.5 text-[10px] text-amber-300/60">
+                                                            ❖ {lastStage.reward_hint}
+                                                        </p>
+                                                    )}
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </AnimatePresence>
                                     <ul className="mt-3 space-y-2">
                                         {activeChains.map((root) => (
                                             <QuestChainGroup key={root.id} root={root} onCancel={cancelQuest} />
@@ -323,52 +386,6 @@ const SettingPanel: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="rounded-2xl border border-white/10 bg-white/3 p-4">
-                            <p className="text-xs uppercase tracking-[0.35em] text-white/45">Premise</p>
-                            <p className="mt-2 text-sm">{setting.description}</p>
-                        </div>
-
-                        {keyThemes.length > 0 && (
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.35em] text-white/45">Key Themes</p>
-                                <ul className="mt-3 space-y-3">
-                                    {keyThemes.map((themeItem, index) => (
-                                        <li key={`${themeItem.theme}-${index}`} className="rounded-2xl border border-white/10 bg-white/3 p-3">
-                                            <p className="text-sm font-semibold text-white">{themeItem.theme}</p>
-                                            <p className="text-xs text-white/60">{themeItem.description}</p>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-
-                        {factions.length > 0 && (
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.35em] text-white/45">Factions</p>
-                                <ul className="mt-3 space-y-3">
-                                    {factions.map((faction, index) => (
-                                        <li key={`${faction.name}-${index}`} className="rounded-2xl border border-white/10 bg-white/3 p-3">
-                                            <p className="text-sm font-semibold text-white">{faction.name}</p>
-                                            <p className="text-xs text-white/60">{faction.description}</p>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-
-                        {locations.length > 0 && (
-                            <div>
-                                <p className="text-xs uppercase tracking-[0.35em] text-white/45">Locations</p>
-                                <ul className="mt-3 space-y-3">
-                                    {locations.map((location, index) => (
-                                        <li key={`${location.name}-${index}`} className="rounded-2xl border border-white/10 bg-white/3 p-3">
-                                            <p className="text-sm font-semibold text-white">{location.name}</p>
-                                            <p className="text-xs text-white/60">{location.description}</p>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
                     </div>
                 </>
             ) : (

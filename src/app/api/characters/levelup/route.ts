@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { MongoClient, ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
+import { getDb } from '@/lib/mongodb';
 
 export async function PATCH(request: Request): Promise<NextResponse> {
     const body: { characterId: string; xpGain: number; statUpgrade?: string } = await request.json();
@@ -9,10 +10,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: 'characterId and xpGain are required' }, { status: 400 });
     }
 
-    const client = new MongoClient(process.env.MONGODB_URI || '');
     try {
-        await client.connect();
-        const db = client.db('dev');
+        const db = await getDb();
         const col = db.collection('characters');
 
         const char = await col.findOne({ _id: new ObjectId(characterId) });
@@ -49,10 +48,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
             stats,
             leveledUp,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error updating XP:', error);
-        return NextResponse.json({ error: error?.message ?? 'Failed to update XP' }, { status: 500 });
-    } finally {
-        await client.close();
+        return NextResponse.json({ error: (error as Error)?.message ?? 'Failed to update XP' }, { status: 500 });
     }
 }

@@ -1,14 +1,12 @@
-import { MongoClient, ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 import { NextResponse } from 'next/server';
+import { getDb } from '@/lib/mongodb';
 
 export async function POST(request: Request) {
-    const client = new MongoClient(process.env.MONGODB_URI as string);
-
     try {
-        await client.connect();
-        const database = client.db('dev');
-        const charactersCollection = database.collection('characters');
-        const sessionsCollection = database.collection('sessions');
+        const db = await getDb();
+        const charactersCollection = db.collection('characters');
+        const sessionsCollection = db.collection('sessions');
 
         const { characterId } = await request.json();
 
@@ -32,7 +30,5 @@ export async function POST(request: Request) {
     } catch (error) {
         console.log(error);
         return NextResponse.json({ error: 'Failed to delete character and session' }, { status: 500 });
-    } finally {
-        await client.close();
     }
 }

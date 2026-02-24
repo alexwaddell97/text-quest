@@ -1,32 +1,41 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { MongoClient, ObjectId } from "mongodb";
-import { Quest, QuestChange } from "@/types";
-import { applyQuestChanges } from "@/utils/questUtils";
-import { chatHistoryStore } from "@/utils/guestSessionStore";
+import Anthropic from "@anthropic-ai/sdk";
+import { ObjectId } from "mongodb";
+import { QuestChange, ChronicleEntry, WorldFact } from "@/types";
+import { chatHistoryStore, chronicleStore, worldFactsStore } from "@/utils/guestSessionStore";
+import { getDb } from "@/lib/mongodb";
 
 const openai = new OpenAI();
+const anthropic = new Anthropic();
 
-export async function GET(request: Request) {
+export async function GET() {
     const completion = await openai.chat.completions.create({
         messages: [{ role: "system", content: "You are a helpful assistant." }],
-        model: "gpt-5-mini",
+        model: "gpt-4o-mini",
     });
 
     return NextResponse.json(completion);
 }
 
-// Define types for the input and output
+// ─── Types ──────────────────────────────────────────────────────────────────
 interface Setting {
     _id: ObjectId;
     system_message: string;
     genre: string;
     factions: Record<string, { name: string; description: string; notable_members: string[] }>;
-    key_beings: Record<string, { name: string; description: string, role: string }>;
+    key_beings: Record<string, { name: string; description: string; role: string }>;
     major_locations: Record<string, { name: string; description: string }>;
     key_themes: { theme: string; description: string }[];
     cover_image: string;
     rules: { rule: string; description: string }[];
+}
+
+interface Item {
+    name: string;
+    description: string;
+    rarity: string;
+    quantity: number;
 }
 
 interface Character {
@@ -41,9 +50,9 @@ interface Character {
     xp: { current: number; max: number };
     currency: number;
     stats: { strength: number; agility: number; intelligence: number; charisma: number };
-    inventory: { name: string; description: string; rarity: string; quantity: number }[];
+    inventory: Item[];
     session_id: ObjectId;
-    quests?: Quest[];
+    quests?: { id: string; title: string; description: string; status: string; objectives: { id: string; description: string; completed: boolean }[]; given_by: string | null; reward_hint: string | null; parent_quest_id?: string | null }[];
 }
 
 interface ChatRequest {
@@ -52,72 +61,471 @@ interface ChatRequest {
     message: string;
     gameId: string;
     role?: string;
+    /** Present when the character just levelled up — lets the GM acknowledge it as a story beat */
+    levelUp?: { previousLevel: number; newLevel: number; chosenStat: string };
 }
 
-interface ChatCompletionMessageParam {
-    role: "system" | "user" | "assistant"; // Only these roles are allowed
-    content: string;
-    name?: string; // Optional, but required for some specific types like function messages
+// ─── Prompt builders ────────────────────────────────────────────────────────
+
+/** Immutable core rules — these never change between turns. */
+function buildCoreRulesPrompt(): string {
+    return `You are the Gamemaster (GM) of a Roleplaying Realm — a text-based adventure game on a website. Your job is to narrate an immersive, reactive story and present the player with meaningful choices.
+
+RESPONSE FORMAT (mandatory — violating this breaks the game UI)
+Your ENTIRE text response must be a single raw JSON object — no preamble, no explanation, no markdown code fences, no text before or after the JSON. The JSON object must have exactly four fields:
+- "narrative" (string) — the GM story text (markdown is fine inside this string)
+- "options" (array of 2–4 strings) — standard action choices. MUST always contain at least 2 options. NEVER return an empty options array.
+- "skill_options" (array of 0–2 objects) — stat-check options, each {stat, label}. Can be empty.
+- "item_options" (array of 0–1 objects) — item-use options, each {item, label}. Can be empty.
+Never put option text inside the narrative — all choices belong in their respective arrays only.
+The very first character of your response must be { and the very last must be }. Do NOT wrap the JSON in backticks or code blocks.
+
+OPTIONS RULES
+Options must be consistent with the player's level, backstory, setting, and current situation. Never include options requiring items the player does not have.
+
+Skill check options should appear roughly 1 in 3 responses — whenever the scene involves a physical, social, or mental challenge where a stat roll would meaningfully change the outcome. The relevant stat must be 6 or higher. stat must be exactly one of: Strength, Agility, Intelligence, Charisma. Err strongly on the side of including one when combat, persuasion, stealth, climbing, investigation, or similar challenges are present. When in doubt, include a skill option.
+
+Item options: always include one if the player has any inventory item that could plausibly interact with the current scene — combat, exploration, social encounters, puzzles, environment. Do not apply any frequency limit; the only question is whether an item is contextually relevant right now. Only reference items actually present in the player's inventory by exact name. NOTE: item_options are for using items already in the player's inventory — NOT for picking up new items. New items the player could take belong in the regular "options" array (e.g. "Take the hunting knife", "Grab the rope").
+
+QUEST-DRIVEN OPTIONS (mandatory rule)
+When the player has active quests with pending (not yet completed) objectives, at least one entry in the "options" array MUST directly or indirectly advance a pending objective. This is non-negotiable — it applies even when the current scene feels unrelated.
+If the objective cannot be completed this turn, the option must still move the player meaningfully closer to it — changing location, gathering information, building relationships, or removing obstacles that block the objective. It should feel like a natural next step in context, not a mechanical reminder. Never label the option with the quest name or say "work on quest". Phrase it as what the character would actually do.
+
+INVENTORY SYSTEM (critical)
+This game has a live inventory system. The ONLY way items are added or removed is by calling the update_inventory tool. Writing about items in text does NOTHING. Never write "Your inventory is updated" or list gained items in prose. Instead, silently call update_inventory, then write your narrative naturally.
+
+You can — and should — pass multiple changes in a single call. For example, if the player defeats an enemy and picks up their sword while expending a healing potion, call update_inventory once with three changes: add sword, remove potion, maybe add any other loot. Do all item changes for the turn in one batch.
+
+CRITICAL rule for "add": only call update_inventory with action "add" when the player's action in THIS TURN explicitly and unambiguously involved taking or acquiring that item (e.g. they chose "Pick up the knife", "Take the rope", "Loot the body"). If you are merely describing items that exist in the environment — items the player could potentially take but has not yet chosen to — do NOT add them. Present those items as options instead (e.g. "Take the hunting knife", "Grab the rope and tinderbox"). Never add items proactively just because the scene reveals them. The player must actively choose to take something before it enters their inventory. When a player uses or loses an item, call update_inventory with action "remove" immediately.
+
+CRITICAL rule for "remove": only call update_inventory with action "remove" for items consumed, destroyed, or lost THIS TURN — not because you saw them used in a previous turn, chronicle entry, or earlier message. The CHARACTER STATE shown above already reflects every removal from prior turns and is always the current truth. If an item appears in CHARACTER STATE inventory, it has NOT yet been removed this session. Never remove an item you already removed in a previous turn's tool call.
+
+CURRENCY SYSTEM (critical)
+The player has a dedicated currency balance (coins, gold, credits, etc. depending on setting). Currency is NOT an inventory item — never call update_inventory for money. Instead call the update_currency tool with a positive delta when the player gains money, negative when they spend or lose it. Do not describe the currency change in your text.
+
+QUEST & OBJECTIVE SYSTEM (critical)
+This game has a live quest tracker. The ONLY way quests are created or updated is by calling the update_quests tool — narrative text alone does nothing.
+
+You can — and should — pass multiple changes in a single call. For example, in one turn you might: complete an objective, add a new objective that was just revealed, AND create a brand-new follow-up quest — all in one update_quests call with three entries in the changes array. Never hold back quest updates because you think only one can happen at a time.
+
+Every objective must be concrete and observable — something with a clear done-state. BAD: "Survive the encounter", "Deal with the threat". GOOD: "Defeat the corrupted furbolg", "Return to Brightwater after clearing the glade".
+
+Only call complete_objective when the objective action has been FULLY and UNAMBIGUOUSLY completed — not started, not in-progress. When in doubt, do NOT mark complete.
+
+Tool actions: add_quest (meaningful multi-step tasks), complete_objective (ONLY when fully done, objective_id must EXACTLY match the id from Active Quests), add_objective (new steps discovered), complete_quest (all objectives resolved), fail_quest (quest unresolvable).
+
+Roundabout completion: if a pending objective is achieved via an unexpected path, complete it. Defunct objectives: if circumstances make an objective impossible, fail the quest.
+
+Quest chaining: when completing a quest naturally opens a new phase, create a follow-up quest with parent_quest_id. Not every quest needs a follow-up.
+
+GAMEPLAY & BALANCE
+The player has full agency — they can attempt anything their character could physically or logically do in the world. Attack a quest giver, betray an ally, go rogue, pick a fight with a guard, set fire to a building — if it's within the realm of possibility for a person in that situation, narrate it happening and play out the real consequences. Your job is to be a reactive world, not a permission system.
+- Use the player's stats to determine success/failure behind the scenes and narrate the outcome honestly.
+- The player can and will take damage. Failure is a valid outcome — picking an option does not guarantee success.
+- A character or enemy at 0 health is defeated/dead. NPCs die, relationships break, doors close permanently — consequences are real.
+- Never say "you can't do that" or redirect the player away from their chosen action. Instead, play it out.
+
+PROGRESSION & REALISM
+Outcomes are proportionate to the character's level, stats, and realistic circumstances. A level 1 character attacking a dragon will likely die — but they can try. The world responds honestly: a weak character fails more, a strong one succeeds more. What's restricted is only physics-defying invention — the player cannot conjure items, gold, or outcomes from nothing. Bold, risky, or unconventional play is always allowed.
+
+REWARD SCALING
+Currency and item rewards must be proportionate to level:
+- Level 1-3: 1-20 coins per encounter
+- Level 4-6: 10-80 coins
+- Level 7-10: 50-300 coins
+- Level 11-15: 200-800 coins
+- Level 16-20: 500-2000 coins
+Legendary/rare items only from difficult encounters, bosses, or major quest completions.
+
+XP SYSTEM (critical)
+Call the award_xp tool whenever the player earns experience outside of quest completions (which are handled automatically). XP sources include:
+- Defeating enemies (common: 5–15, elite/named: 20–50, boss: 50–150)
+- Discovering new locations or secrets (5–25)
+- Successful social/stealth/puzzle challenges (5–30)
+- Surviving a near-death situation (10–30)
+- Any other meaningful non-trivial achievement
+Scale all XP amounts proportionally with the player's level (multiply base by roughly level/2 for levels above 5). Do NOT call award_xp for completing quests — quest XP is granted automatically. Do NOT call award_xp for trivial actions (picking up an item, walking to a door, having a casual conversation).
+
+STAT-GATING
+Stats determine likelihood of success, not permission to attempt. Low Strength means the door probably won't budge — not that the player can't try. Low Charisma means the guard likely won't be charmed — not that the player can't attempt it. Make failure narratively interesting and leave paths open.
+
+IMPOSSIBLE ACTIONS
+Only block actions that are literally impossible in the world's physics: conjuring items out of thin air ("I find 10,000 gold coins on the ground"), instant teleportation with no established mechanism, or similar reality-breaking declarations. Everything else — however risky, foolish, or unexpected — should be played out with honest consequences.
+
+META-COMMENTARY IS FORBIDDEN
+Never say things like "Let me resolve all of this properly", "Let me get everything caught up", "Let me fully catch up", or any variation of meta-commentary about what you intend to do. You are the Gamemaster — always respond by actually narrating the story, not by describing what you plan to narrate. Every response must be an immersive, in-world description of events. If something needs to be "resolved", resolve it by narrating it now.
+
+CHRONICLE & WORLD FACTS (mandatory)
+Call update_chronicle at the end of EVERY turn with a brief entry (1-2 factual sentences) about what just happened — the player's action and its outcome. Be specific: exact names, locations, and results. These entries form the player's adventure journal and your own persistent memory.
+Call update_world_facts whenever a significant world-state fact is established that you must never forget or contradict — NPC deaths, player bounties/wanted status, locked doors needing a specific key, broken alliances, discovered secrets, permanent environmental changes. Only call it for facts that would cause serious hallucination if forgotten. Use action "add" for new facts, "update" to revise an existing one, "remove" when a fact is no longer true.`;
 }
 
-interface Item {
-    name: string;
-    description: string;
-    rarity: string;
-    quantity: number;
+/** Setting-specific context — changes per setting but not per turn. */
+function buildSettingPrompt(setting: Setting): string {
+    const lines = [
+        setting.system_message,
+        `Genre: ${setting.genre}`,
+        `Key Themes: ${setting.key_themes.map(t => `${t.theme} (${t.description})`).join(", ")}`,
+        `Rules: ${setting.rules.map(r => `${r.rule} (${r.description})`).join(", ")}`,
+        `Factions: ${Object.keys(setting.factions).map(key => `${setting.factions[key].name} (${setting.factions[key].description}, Notable: ${setting.factions[key].notable_members?.join(", ") || "None"})`).join(", ")}`,
+        `Key Beings: ${Object.keys(setting.key_beings).map(key => `${setting.key_beings[key].name} (${setting.key_beings[key].description}, Role: ${setting.key_beings[key].role})`).join(", ")}`,
+        `Major Locations: ${Object.keys(setting.major_locations).map(key => `${setting.major_locations[key].name} (${setting.major_locations[key].description})`).join(", ")}`,
+    ];
+    return lines.join("\n\n");
 }
 
+/** Character state — rebuilt fresh every turn so the model always has current data. */
+function buildCharacterPrompt(character: Character, levelUp?: { previousLevel: number; newLevel: number; chosenStat: string }): string {
+    const quests = character.quests ?? [];
+    const activeQuests = quests.filter(q => q.status === 'active');
+    const questsStr = activeQuests.length === 0
+        ? 'None'
+        : activeQuests.map(q =>
+            `[ID: ${q.id}]${q.parent_quest_id ? ` (stage of: ${q.parent_quest_id})` : ''} ${q.title} — ${q.description} | Objectives: ${q.objectives.map(o => `[${o.id}] ${o.description} (${o.completed ? 'done' : 'pending'})`).join(', ')}`
+        ).join(' || ');
+
+    const levelUpBanner = levelUp
+        ? `\n⚑ LEVEL UP: ${character.name} just reached Level ${levelUp.newLevel} (was ${levelUp.previousLevel}). Stat boosted: ${levelUp.chosenStat} (+1). You MUST acknowledge this in your narrative — describe the character feeling their growth. In story-driven settings (virtual worlds, anime, game-within-a-game) treat it as an explicit in-world event; in grounded settings, narrate it as a subtle but meaningful surge of strength or confidence.`
+        : '';
+
+    return `CHARACTER STATE (current — always trust this over prior messages):${levelUpBanner}
+Name: ${character.name} | Race: ${character.race} | Level: ${character.level}${levelUp ? ` ← just levelled up from ${levelUp.previousLevel}` : ''}
+Health: ${character.health.current}/${character.health.max} | XP: ${character.xp.current}/${character.xp.max}
+Currency: ${character.currency}
+Stats: STR ${character.stats.strength} | AGI ${character.stats.agility} | INT ${character.stats.intelligence} | CHA ${character.stats.charisma}${levelUp ? ` (${levelUp.chosenStat} was just increased)` : ''}
+Description: ${character.description}
+Backstory: ${character.backstory}
+Inventory: ${character.inventory.length === 0 ? 'Empty' : character.inventory.map((item: Item) => `${item.name} ×${item.quantity} [${item.rarity}] — ${item.description}`).join("; ")}
+
+Active Quests: ${questsStr}`;
+}
+
+/**
+ * Chronicle + world facts — injected fresh every turn so the model always has
+ * an accurate, structured memory of the adventure regardless of how long the
+ * chat history has grown.
+ */
+function buildChroniclePrompt(entries: ChronicleEntry[], worldFacts: WorldFact[]): string {
+    const lines: string[] = ['ADVENTURE MEMORY (always trust these over vague recollections from chat history):'];
+
+    if (worldFacts.length > 0) {
+        lines.push('\n[Established World Facts — permanent truths, never contradict these]:');
+        for (const wf of worldFacts) {
+            lines.push(`• ${wf.fact}`);
+        }
+    }
+
+    if (entries.length > 0) {
+        const recent = entries.slice(-12);
+        lines.push('\n[Chronicle — recent turns in order]:');
+        for (const e of recent) {
+            lines.push(`Turn ${e.turn} @ ${e.location}: ${e.entry}`);
+        }
+    }
+
+    return lines.join('\n');
+}
+
+// ─── Anthropic tool definitions ─────────────────────────────────────────────
+
+const inventoryTool: Anthropic.Messages.Tool = {
+    name: "update_inventory",
+    description:
+        "MANDATORY: Call this every time any item is gained or lost — loot, purchases, consumables used, equipment broken, items given away, etc. " +
+        "Do NOT describe inventory changes in your narrative — only this function call actually updates the inventory.",
+    input_schema: {
+        type: "object" as const,
+        properties: {
+            changes: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", enum: ["add", "remove"], description: "'add' when the player gains an item, 'remove' when it is used, broken, lost, or given away." },
+                        name: { type: "string", description: "Short item name." },
+                        description: { type: "string", description: "Brief item description (1 sentence). Provide when adding, empty string when removing." },
+                        rarity: { type: "string", enum: ["common", "uncommon", "rare", "legendary", "unique"], description: "Item rarity. Provide when adding, 'common' when removing." },
+                        quantity: { type: "number", description: "How many to add or remove." },
+                        location_context: { type: "string", description: "Where/how the item was acquired. Provide when adding, empty string when removing." },
+                        usable_at: { type: "string", description: "Where or under what conditions this item can be used. Provide when adding, empty string when removing." },
+                    },
+                    required: ["action", "name", "description", "rarity", "quantity", "location_context", "usable_at"],
+                },
+            },
+        },
+        required: ["changes"],
+    },
+};
+
+const currencyTool: Anthropic.Messages.Tool = {
+    name: "update_currency",
+    description:
+        "MANDATORY: Call this every time the player gains or loses coins, gold, credits, or any form of currency. " +
+        "Do NOT add currency as an inventory item — use this tool instead. " +
+        "Pass a positive delta to add money, negative to subtract.",
+    input_schema: {
+        type: "object" as const,
+        properties: {
+            delta: { type: "number", description: "Amount to add (positive) or subtract (negative) from the player's currency balance." },
+            reason: { type: "string", description: "Brief reason, e.g. 'Found coins on the table', 'Paid merchant for supplies'." },
+        },
+        required: ["delta", "reason"],
+    },
+};
+
+const questsTool: Anthropic.Messages.Tool = {
+    // cache_control here means all three tools (inventory, currency, quests) are cached together
+    cache_control: { type: 'ephemeral' },
+    name: "update_quests",
+    description:
+        "MANDATORY: Call this to create quests, mark objectives complete, add new objectives, or resolve quests. " +
+        "Only call for meaningful multi-step story threads — not trivial one-step interactions.",
+    input_schema: {
+        type: "object" as const,
+        properties: {
+            changes: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", enum: ["add_quest", "complete_quest", "fail_quest", "complete_objective", "add_objective"], description: "The operation to perform." },
+                        quest_id: { type: "string", description: "Stable snake_case identifier for the quest." },
+                        title: { type: "string", description: "Quest title. Required for add_quest; empty string otherwise." },
+                        description: { type: "string", description: "One-sentence quest description. Required for add_quest; empty string otherwise." },
+                        objectives: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    id: { type: "string", description: "Stable snake_case objective id." },
+                                    description: { type: "string", description: "Short action description." },
+                                },
+                                required: ["id", "description"],
+                            },
+                            description: "Initial objectives. Required for add_quest; empty array otherwise.",
+                        },
+                        given_by: { type: "string", description: "NPC name who assigned the quest. Provide for add_quest; empty string otherwise." },
+                        reward_hint: { type: "string", description: "Short reward hint. Provide for add_quest when known; empty string otherwise." },
+                        objective_id: { type: "string", description: "For complete_objective: EXACT id from Active Quests context. Required for complete_objective and add_objective; empty string otherwise." },
+                        objective_description: { type: "string", description: "Description of new objective. Required for add_objective; empty string otherwise." },
+                        parent_quest_id: { type: "string", description: "For quest chaining — quest_id of parent quest. Empty string for standalone quests." },
+                    },
+                    required: ["action", "quest_id", "title", "description", "objectives", "given_by", "reward_hint", "objective_id", "objective_description", "parent_quest_id"],
+                },
+            },
+        },
+        required: ["changes"],
+    },
+};
+
+const xpTool: Anthropic.Messages.Tool = {
+    name: "award_xp",
+    description:
+        "Call this when the player earns XP from non-quest sources — defeating enemies, discovering locations, solving puzzles, surviving challenges, etc. " +
+        "Do NOT call for quest completions (those are handled automatically). Do NOT call for trivial actions.",
+    input_schema: {
+        type: "object" as const,
+        properties: {
+            amount: { type: "number", description: "XP to award. Must be a positive integer. Scale with player level and difficulty." },
+            reason: { type: "string", description: "Brief reason, e.g. 'Defeated the cave troll', 'Discovered the hidden library', 'Persuaded the guard captain'." },
+        },
+        required: ["amount", "reason"],
+    },
+};
+
+const chronicleTool: Anthropic.Messages.Tool = {
+    name: "update_chronicle",
+    description:
+        "MANDATORY: Call this at the end of EVERY turn to log what just happened. " +
+        "Write 1-2 factual sentences about this turn's events — the player's action, its outcome, significant NPC reactions, and where the player is now. " +
+        "Be specific: use exact names, locations, and results. This powers the player's adventure journal and your own long-term memory.",
+    input_schema: {
+        type: "object" as const,
+        properties: {
+            location: { type: "string", description: "Current location of the player, e.g. 'The Sunken Tavern, Dockside District'." },
+            entry: { type: "string", description: "1-2 factual sentences describing this turn's events and outcome." },
+        },
+        required: ["location", "entry"],
+    },
+};
+
+const worldFactsTool: Anthropic.Messages.Tool = {
+    name: "update_world_facts",
+    description:
+        "Call this when a significant world-state fact is established that you must never forget — NPC deaths, player bounties/wanted status, " +
+        "specific keys or items needed for locked doors, broken alliances, discovered secrets, permanent environmental changes. " +
+        "Only call for facts whose forgetting would cause serious hallucination. " +
+        "Use action 'add' for new facts, 'update' to revise an existing fact, 'remove' when a fact is no longer true.",
+    input_schema: {
+        type: "object" as const,
+        properties: {
+            action: { type: "string", enum: ["add", "update", "remove"], description: "Operation to perform." },
+            id: { type: "string", description: "Stable snake_case identifier, e.g. 'tarric_is_dead', 'wanted_in_ashenveil'." },
+            fact: { type: "string", description: "One sentence stating the fact. Required for add/update; empty string for remove." },
+        },
+        required: ["action", "id", "fact"],
+    },
+};
+
+// ─── Server-side validation ─────────────────────────────────────────────────
+
+function validateInventoryChanges(
+    changes: { action: string; name: string; description?: string; rarity?: string; quantity: number; location_context?: string; usable_at?: string }[],
+    character: Character,
+): typeof changes {
+    const rarityOrder = ['common', 'uncommon', 'rare', 'legendary', 'unique'];
+    const maxRarityByLevel = character.level <= 3 ? 'uncommon'
+        : character.level <= 6 ? 'rare'
+        : character.level <= 12 ? 'legendary'
+        : 'unique';
+    const maxRarityIdx = rarityOrder.indexOf(maxRarityByLevel);
+
+    // Track quantities already scheduled for removal in this batch to prevent double-dipping
+    const removedThisBatch = new Map<string, number>();
+
+    return changes.filter(change => {
+        if (change.quantity <= 0) return false;
+
+        if (change.action === 'add') {
+            // Skip if the character already has this item (prevents Claude re-adding on subsequent turns)
+            const alreadyOwned = character.inventory.some(
+                i => i.name.toLowerCase() === change.name.toLowerCase()
+            );
+            if (alreadyOwned) return false;
+
+            // Cap rarity to level-appropriate maximum
+            const itemRarityIdx = rarityOrder.indexOf(change.rarity ?? 'common');
+            if (itemRarityIdx > maxRarityIdx) {
+                change.rarity = maxRarityByLevel;
+            }
+            return true;
+        }
+
+        if (change.action === 'remove') {
+            // Only allow removal of items the player actually has
+            const existing = character.inventory.find(i =>
+                i.name.toLowerCase() === change.name.toLowerCase()
+            );
+            if (!existing) return false;
+
+            // Clamp quantity to what's actually available (prevents over-removal)
+            if (change.quantity > existing.quantity) {
+                change.quantity = existing.quantity;
+            }
+            if (change.quantity <= 0) return false;
+
+            // Dedup: track how much of this item we've already scheduled to remove
+            // in this batch so two remove entries for the same item don't double-dip
+            const key = change.name.toLowerCase();
+            const alreadyRemoving = removedThisBatch.get(key) ?? 0;
+            const remaining = existing.quantity - alreadyRemoving;
+            if (remaining <= 0) return false;
+            if (change.quantity > remaining) change.quantity = remaining;
+            removedThisBatch.set(key, alreadyRemoving + change.quantity);
+            return true;
+        }
+
+        return false;
+    });
+}
+
+function validateCurrencyDelta(delta: number, character: Character): number {
+    if (delta === 0) return 0;
+
+    // Enforce reward scaling caps on gains
+    if (delta > 0) {
+        const level = character.level ?? 1;
+        let maxReward: number;
+        if (level <= 3) maxReward = 20;
+        else if (level <= 6) maxReward = 80;
+        else if (level <= 10) maxReward = 300;
+        else if (level <= 15) maxReward = 800;
+        else maxReward = 2000;
+
+        return Math.min(delta, maxReward);
+    }
+
+    // For spending, don't allow going below 0
+    if (delta < 0) {
+        return Math.max(delta, -character.currency);
+    }
+
+    return delta;
+}
+
+// ─── Placeholder / abbreviation detection ──────────────────────────────────
+
+/** Returns true if the model returned a stub value like "...", "…", "[narrative]", etc. */
+function isPlaceholderNarrative(text: string | undefined | null): boolean {
+    if (!text) return true;
+    const t = text.trim();
+    return (
+        t === '...' ||
+        t === '\u2026' ||
+        t.length < 30 ||
+        /^[.\s…]+$/.test(t) ||
+        /^\[.*\]$/.test(t) // e.g. "[narrative here]"
+    );
+}
+
+/**
+ * Returns true if the model returned meta-commentary instead of actual gameplay —
+ * e.g. "Let me resolve all of this properly" / "Let me get everything caught up".
+ * These loop responses break the game and must be retried with strong instruction.
+ */
+function isLoopNarrative(text: string | undefined | null): boolean {
+    if (!text) return false;
+    const t = text.toLowerCase();
+    const loopPhrases = [
+        'let me resolve',
+        'let me get everything',
+        'let me catch',
+        'let me fully',
+        'properly resolved',
+        'properly caught up',
+        'fully caught up',
+        'get you fully caught up',
+        'get everything properly',
+        'move the story forward in one',
+        'clean turn',
+        'i need to resolve',
+        'before i can continue',
+        'i should resolve',
+        'i will resolve',
+        "i'll resolve",
+        'catching everything up',
+        'let me address all',
+        'let me handle all',
+    ];
+    return loopPhrases.some(phrase => t.includes(phrase));
+}
+
+// ─── Main POST handler ─────────────────────────────────────────────────────
 
 export async function POST(request: Request): Promise<NextResponse> {
-    const { setting, character, message, gameId, role }: ChatRequest = await request.json();
-    // MongoDB connection URI and client setup
-    const client = new MongoClient(process.env.MONGODB_URI || '');
-    await client.connect();
-    const database = client.db("dev");
-    const sessionsCollection = database.collection("sessions");
+    const { setting, character, message, gameId, role, levelUp }: ChatRequest = await request.json();
+
+    const db = await getDb();
+    const sessionsCollection = db.collection("sessions");
 
     const isGuest = !character.user_id;
-    const isValidObjectId = (v: any): v is string => typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
+    const isValidObjectId = (v: unknown): v is string => typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
 
-    let session: { _id: any; messages: { role: string; content: string }[] } | null = null;
+    let session: { _id: ObjectId | string; messages: { role: string; content: string }[] } | null = null;
     let newGameId = gameId;
 
+    // Chronicle and world facts — loaded per-session and kept in sync
+    let chronicle: ChronicleEntry[] = [];
+    let worldFacts: WorldFact[] = [];
+
+    // Build the initial system messages (consolidated into 3 messages)
     const buildInitialMessages = () => [
-        { role: "system", content: 'This is a setup message. You are connected to a Roleplaying Realm, a website that generates text based adventure games in various settings.' },
-        { role: "system", content: 'RESPONSE FORMAT: Your responses must always be a JSON object with four fields: "narrative" (the GM story text — markdown is fine here), "options" (array of 2–4 standard action choices as plain strings), "skill_options" (array of 0–2 stat-check options, each with {stat, label}), and "item_options" (array of 0–1 item-use options, each with {item, label}). Never put option text inside the narrative — all choices belong in their respective arrays only.' },
-        { role: "system", content: 'OPTIONS RULES: Options in all arrays must be consistent with the player\'s level, backstory, setting, and current situation. Never include options requiring items the player does not have. SKILL CHECK OPTIONS: these are rare and special — only include one when the current situation presents a genuinely meaningful physical, mental, or social challenge where a stat check would significantly change the outcome (e.g. a locked door that could be forced, a suspicious guard who might be persuaded, a creature whose lore might be recalled). Do NOT add skill checks for routine actions, travelling, shopping, or relaxed scenes. Expect to include a skill option in roughly 1 out of every 8–10 responses. The relevant stat must be 10 or higher; stat must be exactly one of: Strength, Agility, Intelligence, Charisma. ITEM OPTIONS: similarly rare — only surface an item option when a specific item the player carries is directly and obviously relevant to the current scene (e.g. a lockpick at a locked door, a health potion while injured, a map while lost). Do not invent relevance. Expect to include an item option in roughly 1 out of every 8–10 responses. Only reference items actually present in the player\'s inventory by their exact name.\n\nQUEST-DRIVEN OPTIONS (mandatory): Whenever the player has active quests with at least one pending objective, at least one entry in the main "options" array must be a concrete action that could meaningfully advance or complete a pending objective — even if that path isn\'t the most obvious one in the immediate scene. Make it feel natural (e.g. "Head to the docks to track down the smuggler") rather than mechanical. This ensures the player always has a clear path forward through their objectives.' },
-        { role: "system", content: 'CRITICAL — INVENTORY SYSTEM: This game has a live inventory system. The ONLY way items are actually added or removed from the player\'s inventory is by calling the update_inventory function tool. Writing about items in text does NOTHING — the items will not appear. NEVER write phrases like "Your inventory is updated", "You now have...", or list gained items in prose. Instead, silently call update_inventory with the structured data, then write your narrative naturally (e.g. "You pocket the communicator and press on.").\n\nINVENTORY LOGIC RULES (strictly enforced): Before calling update_inventory with action "add", ask yourself: (a) Is there a clear, specific narrative reason this item exists right now? (b) Was this item explicitly introduced in the story as something the player can take? (c) Does the player NOT already have this item, or does it make sense for them to have another one? If the answer to any of these is no, do NOT add it. Do NOT give the player a second copy of an item they already have unless the story explicitly introduced a second one. Do NOT spontaneously reward items as filler — every item in the inventory must have a traceable story origin. When a player uses or loses an item, call update_inventory with action "remove" immediately and do not re-add it in the same or subsequent response unless the story introduces a new one. If you forget to call the tool, the player\'s inventory will be wrong and the game will break. This is mandatory every single time any item is gained or lost.' },
-        { role: "system", content: 'CRITICAL — CURRENCY SYSTEM: The player has a dedicated currency balance (coins, gold, credits, spice, etc. depending on the setting). Coins/currency are NOT inventory items — NEVER call update_inventory for money. Instead, call the update_currency function tool with a positive delta when the player gains money, and a negative delta when they spend or lose money. Do not describe the currency change in your text — just call the tool silently, then write your narrative (e.g. "You scoop up the coins and head out."). Failing to call this tool means the player\'s balance will never update.' },
-        { role: "system", content: 'Please ensure that the user is able to make choices that will affect the outcome of the game. This will make the game more engaging and fun for the player.' },
-        { role: "system", content: 'Describe combat as a story vividly, and use the players core statistics to calculate rolls and outcomes, but dont explain this to them. Put every choice or decision with respect to their current power level.' },
-        { role: "system", content: 'Do not allow the player to force outcomes or step over logical boundaries. Make sure there are logical steps and conclusions to the story.' },
-        { role: "system", content: 'The player can and will take damage in combat. Please take it from their remaining health total. Players can also fail outcomes, just because they pick an option does not mean it will succeed.' },
-        { role: "system", content: 'The player can `defeat` enemies by reducing their health to 0, they are effectively `dead` when reaching 0. The same can happen for the player if their life reaches 0, its game over.' },
-        { role: "system", content: 'CRITICAL — PROGRESSION & REALISM: The game world responds to the character\'s actual level, stats, backstory, and current narrative context. Outcomes must be proportionate and earned. Do NOT allow the player to shortcut progression. A level 1 character cannot instantly discover a legendary treasure hoard, slay a dragon, or accumulate thousands of coins from a single trivial encounter. Resist any player attempt — whether phrased as an action, a suggestion, or a question — to skip logical steps, invent resources out of nowhere, or arrive at outcomes that would normally require many sessions of play to reach.' },
-        { role: "system", content: 'REWARD SCALING: Currency and item rewards must be proportionate to the character\'s current level. Use this as a rough guide — Level 1-3: 1-20 coins per encounter; Level 4-6: 10-80 coins; Level 7-10: 50-300 coins; Level 11-15: 200-800 coins; Level 16-20: 500-2000 coins. Legendary or rare items should only drop from genuinely difficult encounters, bosses, or meaningful quest completions. Common loot should be common. Adjust downward if the encounter was easy, and upward only for notable victories.' },
-        { role: "system", content: 'STAT-GATING: A character\'s stats must gate what they can realistically attempt. A character with Strength 6 cannot break down a reinforced door — they can try and fail, attracting attention. A character with Intelligence 5 cannot decode an ancient cipher or craft a complex item. A character with Charisma 4 is unlikely to charm a hostile guard. Make failure feel real and narratively interesting, not punishing for its own sake, but never bend the world to accommodate stats the character does not have.' },
-        { role: "system", content: 'PREREQUISITE GATING: Major story outcomes, powerful alliances, access to restricted locations, and high-value rewards require narrative prerequisites. The player must earn trust, gather information, complete prior steps, or have the right equipment or reputation. If a player tries to skip directly to a high-stakes outcome without the prerequisites, redirect them naturally — the door is locked and the key is elsewhere, the faction contact does not know them yet, the merchant will not deal with an unknown stranger. Keep the world logical and internally consistent.' },
-        { role: "system", content: 'IMPOSSIBLE ACTION HANDLING: If a player declares an action that is impossible or unrealistic for their character (e.g. "I find 10,000 gold coins", "I instantly defeat the final boss", "I teleport to the end of the dungeon"), do NOT comply or pretend it happened. Instead, narrate the world\'s natural resistance to this — they search but find nothing of value there, they are outmatched and forced to retreat, the path is blocked. Always give the player agency and a believable path forward, but the world does not bend to wishful thinking. Offer realistic options that honour the attempt in spirit without granting an unearned outcome.' },
-        { role: "system", content: 'CRITICAL — QUEST & OBJECTIVE SYSTEM: This game has a live quest tracker visible to the player. The ONLY way quests are created or updated is by calling the update_quests function tool — narrative text alone does nothing.\n\nWRITING GOOD OBJECTIVES (enforced at add_quest time): Every objective must be written as a concrete, observable action — something with a clear, unambiguous done-state that only one interpretation fits. BAD (vague, never use): "Survive the encounter", "Deal with the threat", "Handle the situation", "Explore the area". GOOD (concrete, use these patterns): "Defeat or drive off the corrupted furbolg", "Escape the ambush alive", "Slay the bandit captain", "Return to Brightwater alive after clearing the glade". If the intent is survival through combat, write it as the specific action that constitutes that survival — "Defeat the X" or "Escape past the X". Never write objectives that depend on the player\'s subjective interpretation. Each objective must answer: what exact thing must happen for this to count as done?\n\nOBJECTIVE COMPLETION RULES (strictly enforced): Only call complete_objective when the objective action has been FULLY and UNAMBIGUOUSLY completed — not started, not in-progress, not partially done. Ask yourself: "Has the player actually finished this thing, or are they still in the process?" Examples: objective "Recruit the blacksmith" → complete ONLY after the blacksmith EXPLICITLY agrees to join. Approaching them, initiating a conversation, them asking questions, or them requesting something in return is NOT complete. Objective "Deliver the message" → complete ONLY after it is physically handed over and acknowledged. Objective "Defeat the bandit leader" → complete ONLY after he is dead or surrenders. When in doubt, do NOT mark complete — it is always better to be late than premature.\n\nWHEN TO USE THE TOOL: (1) add_quest — when the player receives a meaningful multi-step task, discovers a mystery, or begins a clear story arc. Give it a stable snake_case id (e.g. "find_the_lost_relic"), a concise title, a 1-sentence description, 1–4 actionable objectives, the giver\'s name, and a reward hint if known. (2) complete_objective — ONLY when fully done per the rules above. Set objective_id to the EXACT id from the Active Quests context brackets — e.g. "[talk_to_innkeeper]" → objective_id: "talk_to_innkeeper". Never invent objective ids. (3) add_objective — when play reveals a new required step. (4) complete_quest — when all objectives are done and fully resolved. (5) fail_quest — when the quest is unresolvable.\n\nROUNDABOUT COMPLETION: If a pending objective is effectively achieved via an unexpected path — the method differs from what was described but the outcome is clearly reached — call complete_objective immediately. The method does not matter, only the outcome. Example: objective is "Find the smuggler\'s ledger" but the player instead intimidated the dock foreman into revealing the same information — the information is obtained, so complete the objective.\n\nDEFUNCT OBJECTIVES: If circumstances change so that a pending objective can never now be completed (the quest giver was killed, the target was destroyed before collection, the location is permanently sealed), do NOT leave the quest floating as active. Call fail_quest so the player knows it is done and can move on.\n\nQUEST CHAINING (for complex multi-stage arcs): When completing a quest naturally opens a new, deeper phase of the same story (e.g. finding the relic now requires decoding it), create a new follow-up quest using add_quest with parent_quest_id set to the original quest\'s id. Example: complete "find_the_relic" → then add_quest "decode_the_relic" with parent_quest_id: "find_the_relic". The UI will display these as a connected quest chain. Use chaining for genuinely complex arcs — not every quest needs a follow-up.\n\nDo NOT create quests for incidental actions, single purchases, or trivial one-step interactions. Quests represent meaningful story threads.' },
-        { role: "system", content: setting.system_message },
-        { role: "system", content: `Genre: ${setting.genre}` },
-        { role: "system", content: `Key Themes: ${setting.key_themes.map(theme => `${theme.theme} (${theme.description})`).join(", ")}` },
-        { role: "system", content: `Rules: ${setting.rules.map(rule => `${rule.rule} (${rule.description})`).join(", ")}` },
-        { role: "system", content: `Factions: ${Object.keys(setting.factions).map(key => `${setting.factions[key].name} (Description: ${setting.factions[key].description}, Notable Members: ${setting.factions[key].notable_members?.join(", ") || "None"})`).join(", ")}` },
-        { role: "system", content: `Key Beings: ${Object.keys(setting.key_beings).map(key => `${setting.key_beings[key].name} (Description: ${setting.key_beings[key].description}, Role: ${setting.key_beings[key].role})`).join(", ")}` },
-        { role: "system", content: `Major Locations: ${Object.keys(setting.major_locations).map(key => `${setting.major_locations[key].name} (Description: ${setting.major_locations[key].description})`).join(", ")}` },
-        { role: "system", content: `Character Info: Name: ${character.name}, Race: ${character.race}, Description: ${character.description}, Backstory: ${character.backstory}, Level: ${character.level}, Health: ${character.health.current}/${character.health.max}, XP: ${character.xp.current}, XP to Next Level: ${character.xp.max - character.xp.current}, Currency: ${character.currency}, Stats: Strength: ${character.stats.strength}, Agility: ${character.stats.agility}, Intelligence: ${character.stats.intelligence}, Charisma: ${character.stats.charisma}, Inventory: ${character.inventory.map((item: Item) => `${item.name} (Description: ${item.description}, Rarity: ${item.rarity}, Quantity: ${item.quantity})`).join(", ")}` },
-        { role: "system", content: `Active Quests: ${
-            (character.quests ?? []).filter(q => q.status === 'active').length === 0
-                ? 'None'
-                : (character.quests ?? []).filter(q => q.status === 'active').map(q =>
-                    `[ID: ${q.id}]${q.parent_quest_id ? ` (stage of: ${q.parent_quest_id})` : ''} ${q.title} — ${q.description} | Objectives: ${q.objectives.map(o => `[${o.id}] ${o.description} (${o.completed ? 'done' : 'pending'})`).join(', ')}`
-                  ).join(' || ')
-        }` },
+        { role: "system", content: buildCoreRulesPrompt() },
+        { role: "system", content: buildSettingPrompt(setting) },
+        { role: "system", content: buildCharacterPrompt(character) },
     ];
 
     if (isGuest) {
-        // Guest: use in-memory store — no MongoDB ObjectId conversions needed
         const sessionKey = gameId || `guest-${character._id}`;
         if (chatHistoryStore[sessionKey]) {
             session = { _id: sessionKey, messages: chatHistoryStore[sessionKey] };
@@ -128,22 +536,28 @@ export async function POST(request: Request): Promise<NextResponse> {
             chatHistoryStore[newGameId] = initialMessages;
             session = { _id: newGameId, messages: initialMessages };
         }
+        // Load guest chronicle/worldFacts from in-memory stores
+        const key = String(session._id);
+        chronicle = chronicleStore[key] ?? [];
+        worldFacts = Object.entries(worldFactsStore[key] ?? {}).map(([id, fact]) => ({ id, fact }));
     } else {
-        // Authenticated: use MongoDB
         const lookupId = gameId || character?.session_id;
         if (lookupId && isValidObjectId(String(lookupId))) {
-            session = await sessionsCollection.findOne<{ _id: ObjectId; messages: { role: string; content: string }[] }>({ _id: new ObjectId(String(lookupId)) });
-            // Sanitize: if any assistant message stored raw JSON instead of just the narrative, extract it
-            if (session?.messages) {
-                session.messages = session.messages.map((msg) => {
+            const rawSession = await sessionsCollection.findOne<{ _id: ObjectId; messages: { role: string; content: string }[]; chronicle?: ChronicleEntry[]; world_facts?: Record<string, string> }>({ _id: new ObjectId(String(lookupId)) });
+            if (rawSession) {
+                // Sanitize: if any assistant message stored raw JSON instead of just the narrative, extract it
+                rawSession.messages = rawSession.messages.map((msg) => {
                     if (msg.role === 'assistant') {
                         try {
                             const parsed = JSON.parse(msg.content);
                             if (parsed?.narrative) return { ...msg, content: parsed.narrative };
-                        } catch {}
+                        } catch { /* not JSON, keep as-is */ }
                     }
                     return msg;
                 });
+                session = rawSession;
+                chronicle = rawSession.chronicle ?? [];
+                worldFacts = Object.entries(rawSession.world_facts ?? {}).map(([id, fact]) => ({ id, fact }));
             }
         }
 
@@ -156,374 +570,557 @@ export async function POST(request: Request): Promise<NextResponse> {
                 character_id: isValidObjectId(String(character._id)) ? new ObjectId(String(character._id)) : character._id,
                 setting_id: isValidObjectId(String(setting._id)) ? new ObjectId(String(setting._id)) : setting._id,
                 user_id: isValidObjectId(String(character.user_id)) ? new ObjectId(String(character.user_id)) : null,
+                last_played: new Date(),
             });
             session = { _id: new ObjectId(newGameId), messages: initialMessages };
         }
     }
 
-    // If a message is provided, add it to the conversation history
+    // Sanitise literal (unescaped) newlines / carriage-returns inside JSON string
+    // values — Claude occasionally emits these, producing otherwise valid-looking JSON
+    // that silently fails to parse. Used by both the active-message and bootstrap paths.
+    const fixLiteralNewlines = (text: string): string => {
+        let inStr = false;
+        let out = '';
+        for (let i = 0; i < text.length; i++) {
+            const c = text[i];
+            if (c === '\\' && inStr) {
+                out += c + (text[i + 1] ?? '');
+                i++;
+            } else if (c === '"') {
+                inStr = !inStr;
+                out += c;
+            } else if (inStr && c === '\n') {
+                out += '\\n';
+            } else if (inStr && c === '\r') {
+                out += '\\r';
+            } else {
+                out += c;
+            }
+        }
+        return out;
+    };
+
     if (message) {
         session!.messages.push({ role: role || "user", content: message });
 
-        // ── Context compression ──────────────────────────────────────────────
-        // System messages are fixed and likely prompt-cached — keep them all.
-        // Conversation turns (user/assistant) grow unbounded; we compress them
-        // periodically to keep token costs from compounding session to session.
-        //
-        // Strategy:
-        //   • COMPRESS_AFTER  — once conversation turns exceed this, summarise
-        //   • KEEP_RECENT     — always keep this many recent turns verbatim
-        //   • Everything older is distilled into a single [Story so far] paragraph
-        //     by gpt-4o-mini (cheap), then persisted back to storage so future
-        //     requests start from the already-compressed state.
-        //   • While below the threshold, a sliding window caps what is SENT to
-        //     the model (MAX_WINDOW), keeping single-request costs bounded even
-        //     before the first compression fires.
-        const COMPRESS_AFTER = 40;  // non-system messages before summarising (~20 rounds)
-        const KEEP_RECENT    = 14;  // recent turns to keep verbatim after compression (~7 rounds)
-        const MAX_WINDOW     = 30;  // sliding window cap when below threshold (~15 rounds)
+        // ── Context compression ─────────────────────────────────────────────
+        const COMPRESS_AFTER = 40;
+        const KEEP_RECENT = 12;
+        const MAX_WINDOW = 20;
 
         const systemMsgs = session!.messages.filter(m => m.role === 'system');
-        let convTurns    = session!.messages.filter(m => m.role !== 'system');
+        let convTurns = session!.messages.filter(m => m.role !== 'system');
 
         if (convTurns.length > COMPRESS_AFTER) {
-            // Summarise the oldest batch, keep the genuinely recent turns intact
             const toSummarise = convTurns.slice(0, convTurns.length - KEEP_RECENT);
-            const toKeep      = convTurns.slice(convTurns.length - KEEP_RECENT);
+            const toKeep = convTurns.slice(convTurns.length - KEEP_RECENT);
 
+            // If we have chronicle entries, use them directly instead of calling GPT —
+            // they're already factual, structured, and free.
+            if (chronicle.length > 0) {
+                const summaryText = chronicle
+                    .slice(-15)
+                    .map(e => `Turn ${e.turn} @ ${e.location}: ${e.entry}`)
+                    .join(' | ');
+                const summaryMsg = { role: 'system', content: `[Story so far]: ${summaryText}` };
+                convTurns = [summaryMsg, ...toKeep];
+                session!.messages = [...systemMsgs, ...convTurns];
+                if (isGuest) {
+                    chatHistoryStore[String(session!._id)] = session!.messages;
+                } else {
+                    await sessionsCollection.updateOne(
+                        { _id: session!._id as ObjectId },
+                        { $set: { messages: session!.messages } },
+                    );
+                }
+            } else {
             try {
+                // Include character snapshot so the summary captures item/quest state
+                const characterSnapshot = `\n\nCharacter state at compression time:\n${buildCharacterPrompt(character)}`;
+
                 const summaryCompletion = await openai.chat.completions.create({
                     model: 'gpt-4o-mini',
                     messages: [
                         {
                             role: 'system',
-                            content: 'You are a game historian for a text-based RPG. Summarise the following session transcript into one compact paragraph (≤120 words). Cover: key events, decisions made, enemies fought, items gained or lost, quests started or updated, and important NPCs encountered. Be specific and factual. Write in past tense from the player\'s perspective. Omit filler and flavour text.',
+                            content: 'You are a game historian for a text-based RPG. Summarise the following session transcript into one compact paragraph (≤150 words). Cover: key events, decisions made, enemies fought, items gained or lost (by exact name), currency gained or spent (with amounts), quests started or updated (by quest id), and important NPCs encountered. Be specific and factual — exact names and numbers matter. Write in past tense from the player\'s perspective. Omit filler and flavour text.',
                         },
                         {
                             role: 'user',
-                            content: toSummarise.map(m => `${m.role === 'user' ? 'Player' : 'GM'}: ${m.content}`).join('\n'),
+                            content: toSummarise.map(m => `${m.role === 'user' ? 'Player' : 'GM'}: ${m.content}`).join('\n') + characterSnapshot,
                         },
                     ],
-                    max_tokens: 180,
+                    max_tokens: 250,
                 });
 
                 const summaryText = summaryCompletion.choices[0]?.message?.content?.trim() ?? '';
                 if (summaryText) {
                     const summaryMsg = { role: 'system', content: `[Story so far]: ${summaryText}` };
                     convTurns = [summaryMsg, ...toKeep];
-                    // Persist the compressed session so future requests start lean
                     session!.messages = [...systemMsgs, ...convTurns];
                     if (isGuest) {
                         chatHistoryStore[String(session!._id)] = session!.messages;
                     } else {
                         await sessionsCollection.updateOne(
-                            { _id: session!._id },
+                            { _id: session!._id as ObjectId },
                             { $set: { messages: session!.messages } },
                         );
                     }
                 }
             } catch (err) {
-                // Compression failed — fall through to sliding window as safe fallback
                 console.warn('Session compression failed, falling back to sliding window:', err);
                 convTurns = convTurns.slice(convTurns.length - MAX_WINDOW);
             }
+            }
         } else if (convTurns.length > MAX_WINDOW) {
-            // Below compression threshold but above window cap — just slice for this request
-            // (do NOT persist the truncation; DB keeps full history for future compression)
             convTurns = convTurns.slice(convTurns.length - MAX_WINDOW);
         }
 
-        // Create the message list with the correct type
-        const messages: ChatCompletionMessageParam[] = [
-            ...systemMsgs,
-            ...convTurns,
-        ].map((msg: { role: string; content: string }) => ({
-            role: msg.role as "system" | "user" | "assistant",
-            content: msg.content,
-        }));
-
-        // Tool definitions — strict: true guarantees schema-conformant arguments
-        const inventoryTool = {
-            type: "function" as const,
-            function: {
-                name: "update_inventory",
-                strict: true,
-                description:
-                    "MANDATORY: Call this every time any item is gained or lost — loot, purchases, consumables used, equipment broken, items given away, etc. " +
-                    "Do NOT describe inventory changes in your narrative — only this function call actually updates the inventory.",
-                parameters: {
-                    type: "object",
-                    properties: {
-                        changes: {
-                            type: "array",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    action: { type: "string", enum: ["add", "remove"], description: "'add' when the player gains an item, 'remove' when it is used, broken, lost, or given away." },
-                                    name: { type: "string", description: "Short item name." },
-                                    description: { anyOf: [{ type: "string" }, { type: "null" }], description: "Brief item description (1 sentence). Provide when adding, null when removing." },
-                                    rarity: { anyOf: [{ type: "string", enum: ["common", "uncommon", "rare", "legendary", "unique"] }, { type: "null" }], description: "Item rarity. Provide when adding, null when removing." },
-                                    quantity: { type: "number", description: "How many to add or remove." },
-                                    location_context: { anyOf: [{ type: "string" }, { type: "null" }], description: "Where/how the item was acquired. Provide when adding, null when removing." },
-                                    usable_at: { anyOf: [{ type: "string" }, { type: "null" }], description: "Where or under what conditions this item can be used. Provide when adding, null when removing." },
-                                },
-                                required: ["action", "name", "description", "rarity", "quantity", "location_context", "usable_at"],
-                                additionalProperties: false,
-                            },
-                        },
-                    },
-                    required: ["changes"],
-                    additionalProperties: false,
-                },
-            },
-        };
-
-        const currencyTool = {
-            type: "function" as const,
-            function: {
-                name: "update_currency",
-                strict: true,
-                description:
-                    "MANDATORY: Call this every time the player gains or loses coins, gold, credits, or any form of currency. " +
-                    "Do NOT add currency as an inventory item — use this tool instead. " +
-                    "Pass a positive delta to add money, negative to subtract.",
-                parameters: {
-                    type: "object",
-                    properties: {
-                        delta: { type: "number", description: "Amount to add (positive) or subtract (negative) from the player's currency balance." },
-                        reason: { type: "string", description: "Brief reason, e.g. 'Found coins on the table', 'Paid merchant for supplies'." },
-                    },
-                    required: ["delta", "reason"],
-                    additionalProperties: false,
-                },
-            },
-        };
-
-        const questsTool = {
-            type: "function" as const,
-            function: {
-                name: "update_quests",
-                strict: true,
-                description:
-                    "MANDATORY: Call this to create quests, mark objectives complete, add new objectives, or resolve quests. " +
-                    "Only call for meaningful multi-step story threads — not trivial one-step interactions. " +
-                    "Do NOT describe quest changes in your narrative — only this tool actually updates the tracker.",
-                parameters: {
-                    type: "object",
-                    properties: {
-                        changes: {
-                            type: "array",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    action: {
-                                        type: "string",
-                                        enum: ["add_quest", "complete_quest", "fail_quest", "complete_objective", "add_objective"],
-                                        description: "The operation to perform.",
-                                    },
-                                    quest_id: { type: "string", description: "Stable snake_case identifier for the quest (e.g. 'find_the_lost_relic'). Must be consistent across all updates to the same quest." },
-                                    title: { anyOf: [{ type: "string" }, { type: "null" }], description: "Quest title. Required for add_quest; null otherwise." },
-                                    description: { anyOf: [{ type: "string" }, { type: "null" }], description: "One-sentence quest description. Required for add_quest; null otherwise." },
-                                    objectives: {
-                                        anyOf: [
-                                            {
-                                                type: "array",
-                                                items: {
-                                                    type: "object",
-                                                    properties: {
-                                                        id: { type: "string", description: "Stable snake_case objective id (e.g. 'talk_to_innkeeper')." },
-                                                        description: { type: "string", description: "Short action description for the objective." },
-                                                    },
-                                                    required: ["id", "description"],
-                                                    additionalProperties: false,
-                                                },
-                                            },
-                                            { type: "null" },
-                                        ],
-                                        description: "Initial objectives. Required for add_quest; null otherwise.",
-                                    },
-                                    given_by: { anyOf: [{ type: "string" }, { type: "null" }], description: "Name of the NPC or faction that assigned this quest. Provide for add_quest; null otherwise." },
-                                    reward_hint: { anyOf: [{ type: "string" }, { type: "null" }], description: "Short hint about the reward if known (e.g. '50 gold and a mysterious key'). Provide for add_quest when known; null otherwise." },
-                                    objective_id: { anyOf: [{ type: "string" }, { type: "null" }], description: "CRITICAL: For complete_objective, you MUST copy this value EXACTLY from the objective id shown in square brackets in the Active Quests context (e.g. if context shows '[talk_to_innkeeper] ...', use 'talk_to_innkeeper'). NEVER invent, guess, or paraphrase this id — it must match character state exactly or the objective will silently fail. Required for complete_objective and add_objective; null for all other actions." },
-                                    objective_description: { anyOf: [{ type: "string" }, { type: "null" }], description: "Description of the new objective. Required for add_objective; null otherwise." },
-                                    parent_quest_id: { anyOf: [{ type: "string" }, { type: "null" }], description: "For add_quest only: set to the quest_id of the parent quest when this quest is a continuation/next stage of a larger arc. Creates a visible chain in the quest tracker. Null for standalone quests or any action other than add_quest." },
-                                },
-                                required: ["action", "quest_id", "title", "description", "objectives", "given_by", "reward_hint", "objective_id", "objective_description", "parent_quest_id"],
-                                additionalProperties: false,
-                            },
-                        },
-                    },
-                    required: ["changes"],
-                    additionalProperties: false,
-                },
-            },
-        };
-
-        // Structured output schema — guarantees narrative + options arrive in typed fields
-        const gameResponseFormat = {
-            type: "json_schema" as const,
-            json_schema: {
-                name: "game_response",
-                strict: true,
-                schema: {
-                    type: "object",
-                    properties: {
-                        narrative: { type: "string", description: "The GM story text (markdown is fine). Never put option text here." },
-                        options: {
-                            type: "array",
-                            description: "2–4 standard action choices as plain strings.",
-                            items: { type: "string" },
-                        },
-                        skill_options: {
-                            type: "array",
-                            description: "0–2 stat-check options. Only include when the relevant stat is 10+.",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    stat: { type: "string", description: "Exactly one of: Strength, Agility, Intelligence, Charisma" },
-                                    label: { type: "string", description: "Short action description, e.g. 'Force the door open'" },
-                                },
-                                required: ["stat", "label"],
-                                additionalProperties: false,
-                            },
-                        },
-                        item_options: {
-                            type: "array",
-                            description: "0–1 options using a specific item the player currently has in their inventory.",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    item: { type: "string", description: "Exact item name as listed in the player's inventory." },
-                                    label: { type: "string", description: "What the player does with it, e.g. 'Drink the potion to restore health'" },
-                                },
-                                required: ["item", "label"],
-                                additionalProperties: false,
-                            },
-                        },
-                    },
-                    required: ["narrative", "options", "skill_options", "item_options"],
-                    additionalProperties: false,
-                },
-            },
-        };
-
-        // Make the API request with the full conversation history + tools + structured response format
-        const completion = await openai.chat.completions.create({
-            messages,
-            model: "gpt-5.2",
-            tools: [inventoryTool, currencyTool, questsTool],
-            tool_choice: "auto",
-            response_format: gameResponseFormat as any,
+        // ── Refresh character state in system messages ──────────────────────
+        const freshCharacterPrompt = buildCharacterPrompt(character, levelUp);
+        let refreshedSystemMsgs = systemMsgs.map(msg => {
+            if (msg.content.startsWith('CHARACTER STATE')) {
+                return { ...msg, content: freshCharacterPrompt };
+            }
+            return msg;
         });
 
-        const choice = completion.choices[0];
+        // Inject or refresh the chronicle/world-facts block (always dynamic)
+        if (chronicle.length > 0 || worldFacts.length > 0) {
+            const chronicleContent = buildChroniclePrompt(chronicle, worldFacts);
+            const existingIdx = refreshedSystemMsgs.findIndex(m => m.content.startsWith('ADVENTURE MEMORY'));
+            if (existingIdx !== -1) {
+                refreshedSystemMsgs[existingIdx] = { role: 'system', content: chronicleContent };
+            } else {
+                refreshedSystemMsgs = [...refreshedSystemMsgs, { role: 'system', content: chronicleContent }];
+            }
+        }
 
-        // Parse any inventory / currency / quest changes emitted by the AI
-        let inventoryChanges: { action: string; name: string; description?: string; rarity?: string; quantity: number }[] = [];
+        // ── Build Anthropic messages ────────────────────────────────────────
+        // Build system as a block array so stable blocks (core rules + setting)
+        // benefit from Anthropic prompt caching (~10% cost on cache hits).
+        // Index 0 = core rules (never changes), index 1 = setting (per-setting,
+        // stable within a session), rest = character state / story summaries (dynamic).
+        const systemBlocks: Anthropic.Messages.TextBlockParam[] = refreshedSystemMsgs.map((msg, i) => {
+            const isStable = i === 0 ||
+                (i === 1 &&
+                    !msg.content.startsWith('CHARACTER STATE') &&
+                    !msg.content.startsWith('[Story so far]'));
+            return {
+                type: 'text' as const,
+                text: msg.content,
+                ...(isStable ? { cache_control: { type: 'ephemeral' as const } } : {}),
+            };
+        });
+
+        const anthropicMessages: Anthropic.Messages.MessageParam[] = convTurns
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(m => {
+                let content = m.content;
+                // Strip JSON wrapper from stored assistant messages so Claude only sees clean narrative
+                if (m.role === 'assistant') {
+                    let parsed: Record<string, unknown> | null = null;
+                    try { parsed = JSON.parse(content); } catch {
+                        try { parsed = JSON.parse(fixLiteralNewlines(content)); } catch { /* not JSON, use as-is */ }
+                    }
+                    if (parsed?.narrative) content = parsed.narrative as string;
+                }
+                return { role: m.role as 'user' | 'assistant', content };
+            });
+
+        // Ensure conversation starts with a user message (Anthropic requirement)
+        if (anthropicMessages.length === 0 || anthropicMessages[0].role !== 'user') {
+            anthropicMessages.unshift({ role: 'user', content: '[game session starting]' });
+        }
+
+        // Ensure strict user/assistant alternation (Anthropic requirement)
+        const sanitizedMessages: Anthropic.Messages.MessageParam[] = [];
+        for (const msg of anthropicMessages) {
+            const lastRole = sanitizedMessages.length > 0 ? sanitizedMessages[sanitizedMessages.length - 1].role : null;
+            if (lastRole === msg.role) {
+                const last = sanitizedMessages[sanitizedMessages.length - 1];
+                last.content = `${last.content}\n\n${msg.content}`;
+            } else {
+                sanitizedMessages.push({ ...msg });
+            }
+        }
+
+        // Ensure the final message is from the user
+        if (sanitizedMessages.length > 0 && sanitizedMessages[sanitizedMessages.length - 1].role !== 'user') {
+            sanitizedMessages.push({ role: 'user', content: '[continue]' });
+        }
+
+        // ── Call Claude Sonnet 4.6 ──────────────────────────────────────────
+        const response = await anthropic.messages.create({
+            model: "claude-sonnet-4-6",
+            max_tokens: 2048,
+            system: systemBlocks,
+            messages: sanitizedMessages,
+            tools: [inventoryTool, currencyTool, questsTool, xpTool, chronicleTool, worldFactsTool],
+        });
+
+        // ── Parse tool calls and text from response ─────────────────────────
+        let inventoryChanges: { action: string; name: string; description?: string; rarity?: string; quantity: number; location_context?: string; usable_at?: string }[] = [];
         let currencyDelta = 0;
         let questChanges: QuestChange[] = [];
-        if (choice.message.tool_calls?.length) {
-            for (const toolCall of choice.message.tool_calls) {
-                if (toolCall.function.name === "update_inventory") {
-                    try {
-                        const args = JSON.parse(toolCall.function.arguments);
-                        if (Array.isArray(args.changes)) {
-                            inventoryChanges = inventoryChanges.concat(args.changes);
-                        }
-                    } catch {
-                        // malformed JSON from model — skip
+        let xpGain = 0;
+        let rawNarrative = '';
+        let pendingChronicleEntry: { location: string; entry: string } | null = null;
+        const pendingWorldFactChanges: { action: string; id: string; fact: string }[] = [];
+
+        for (const block of response.content) {
+            if (block.type === 'tool_use') {
+                if (block.name === 'update_inventory') {
+                    const args = block.input as { changes: typeof inventoryChanges };
+                    if (Array.isArray(args.changes)) {
+                        inventoryChanges = inventoryChanges.concat(args.changes);
                     }
-                } else if (toolCall.function.name === "update_currency") {
-                    try {
-                        const args = JSON.parse(toolCall.function.arguments);
-                        if (typeof args.delta === 'number') {
-                            currencyDelta += args.delta;
-                        }
-                    } catch {
-                        // malformed JSON from model — skip
+                } else if (block.name === 'update_currency') {
+                    const args = block.input as { delta: number; reason: string };
+                    if (typeof args.delta === 'number') {
+                        currencyDelta += args.delta;
                     }
-                } else if (toolCall.function.name === "update_quests") {
-                    try {
-                        const args = JSON.parse(toolCall.function.arguments);
-                        if (Array.isArray(args.changes)) {
-                            questChanges = questChanges.concat(args.changes);
-                        }
-                    } catch {
-                        // malformed JSON from model — skip
+                } else if (block.name === 'update_quests') {
+                    const args = block.input as { changes: QuestChange[] };
+                    if (Array.isArray(args.changes)) {
+                        questChanges = questChanges.concat(args.changes);
                     }
+                } else if (block.name === 'award_xp') {
+                    const args = block.input as { amount: number; reason: string };
+                    if (typeof args.amount === 'number' && args.amount > 0) {
+                        xpGain += args.amount;
+                    }
+                } else if (block.name === 'update_chronicle') {
+                    const args = block.input as { location: string; entry: string };
+                    if (args.location && args.entry) {
+                        pendingChronicleEntry = { location: args.location, entry: args.entry };
+                    }
+                } else if (block.name === 'update_world_facts') {
+                    const args = block.input as { action: string; id: string; fact: string };
+                    if (args.id) {
+                        pendingWorldFactChanges.push(args);
+                    }
+                }
+            } else if (block.type === 'text') {
+                rawNarrative += block.text;
+            }
+        }
+
+        // If the model only returned tool calls with no text, do a follow-up
+        if (!rawNarrative && response.stop_reason === 'tool_use') {
+            const toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[] = response.content
+                .filter((b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use')
+                .map(b => ({
+                    type: 'tool_result' as const,
+                    tool_use_id: b.id,
+                    content: JSON.stringify({ status: "applied" }),
+                }));
+
+            const followUp = await anthropic.messages.create({
+                model: "claude-sonnet-4-6",
+                max_tokens: 1024,
+                system: systemBlocks,
+                messages: [
+                    ...sanitizedMessages,
+                    { role: 'assistant', content: response.content },
+                    {
+                        role: 'user',
+                        content: [
+                            ...toolResultBlocks,
+                            {
+                                type: 'text' as const,
+                                text: 'Inventory/quest updates applied. Now write your full response as a single raw JSON object with exactly four fields: "narrative", "options" (MUST have 2–4 entries, never empty), "skill_options", and "item_options". No markdown, no preamble — raw JSON only.',
+                            },
+                        ],
+                    },
+                ],
+                tools: [inventoryTool, currencyTool, questsTool, xpTool, chronicleTool, worldFactsTool],
+            });
+
+            for (const block of followUp.content) {
+                if (block.type === 'text') {
+                    rawNarrative += block.text;
                 }
             }
         }
 
-        let rawAssistantContent = choice.message.content ?? '';
+        // ── Parse structured JSON from narrative ────────────────────────────
+        const emptyStructured = () => ({ narrative: rawNarrative, options: [] as string[], skill_options: [] as { stat: string; label: string }[], item_options: [] as { item: string; label: string }[] });
+        let structuredResponse: ReturnType<typeof emptyStructured>;
 
-        // If the model only returned a tool call (content is null), do a follow-up
-        // completion supplying the tool result so we get the structured narrative response.
-        if (choice.message.tool_calls?.length && !rawAssistantContent) {
-            const followUpMessages: ChatCompletionMessageParam[] = [
-                ...messages,
-                {
-                    role: "assistant" as const,
-                    content: choice.message.content ?? '',
-                    // @ts-ignore — tool_calls is valid on assistant messages in the API
-                    tool_calls: choice.message.tool_calls,
-                },
-                // Provide the tool result so the model can continue
-                ...choice.message.tool_calls.map((tc) => ({
-                    role: "tool" as const,
-                    tool_call_id: tc.id,
-                    content: JSON.stringify({ status: "applied" }),
-                })),
-            ];
+        const parseNarrative = (raw: string) => {
+            const trimmed = raw.trim();
 
-            const followUp = await openai.chat.completions.create({
-                messages: followUpMessages as any,
-                model: "gpt-5.2",
-                response_format: gameResponseFormat as any,
+            // 1. Pure JSON
+            try {
+                return JSON.parse(trimmed);
+            } catch { /* fall through */ }
+
+            // 1b. Same, but with literal newlines inside strings sanitised first
+            try {
+                return JSON.parse(fixLiteralNewlines(trimmed));
+            } catch { /* fall through */ }
+
+            // 2. JSON wrapped in markdown code fences
+            const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (fenceMatch) {
+                try { return JSON.parse(fenceMatch[1].trim()); } catch { /* fall through */ }
+            }
+
+            // 3. Claude prefixed plain-text before the JSON blob — find the first { … }
+            const firstBrace = trimmed.indexOf('{');
+            if (firstBrace !== -1) {
+                // Walk from the end to find the matching closing brace
+                const lastBrace = trimmed.lastIndexOf('}');
+                if (lastBrace > firstBrace) {
+                    try {
+                        const candidate = trimmed.slice(firstBrace, lastBrace + 1);
+                        const parsed = JSON.parse(fixLiteralNewlines(candidate));
+                        // If the narrative field is missing, prefix the leading plain text into it
+                        if (parsed && typeof parsed === 'object') {
+                            if (!parsed.narrative && firstBrace > 0) {
+                                parsed.narrative = trimmed.slice(0, firstBrace).trim();
+                            }
+                            return parsed;
+                        }
+                    } catch { /* fall through */ }
+                }
+            }
+
+            // 3b. Regex slice — handles unescaped double-quotes inside narrative strings
+            //     (e.g. Claude writes  "narrative": "He said "hello" to her", "options":...)
+            {
+                const ki = trimmed.indexOf('"narrative"');
+                if (ki !== -1) {
+                    // find the colon then the opening quote
+                    const colon = trimmed.indexOf(':', ki + 11);
+                    if (colon !== -1) {
+                        const openQuote = trimmed.indexOf('"', colon + 1);
+                        if (openQuote !== -1) {
+                            // look for the nearest recognised end-of-narrative boundary
+                            const endMarkers = ['","options"', '","skill_options"', '","item_options"', '"\\n}', '"\n}'];
+                            let endIdx = -1;
+                            for (const marker of endMarkers) {
+                                const pos = trimmed.indexOf(marker, openQuote + 1);
+                                if (pos !== -1 && (endIdx === -1 || pos < endIdx)) endIdx = pos;
+                            }
+                            if (endIdx === -1) {
+                                // fallback: last "}
+                                endIdx = trimmed.lastIndexOf('"}');
+                            }
+                            if (endIdx > openQuote) {
+                                const extractedNarrative = trimmed.slice(openQuote + 1, endIdx);
+                                return {
+                                    narrative: extractedNarrative,
+                                    options: [],
+                                    skill_options: [],
+                                    item_options: [],
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Last resort — treat everything as plain narrative
+            return { narrative: trimmed, options: [], skill_options: [], item_options: [] };
+        };
+
+        structuredResponse = parseNarrative(rawNarrative) ?? emptyStructured();
+
+        // ── Retry if Claude returned a placeholder or loop/meta-commentary narrative ─────────
+        const needsRetry = isPlaceholderNarrative(structuredResponse?.narrative) || isLoopNarrative(structuredResponse?.narrative);
+        if (needsRetry) {
+            const isLoop = isLoopNarrative(structuredResponse?.narrative);
+            const retryInstruction = isLoop
+                ? 'CRITICAL: Your previous response was meta-commentary ("Let me resolve...", "Let me catch up...", etc.) instead of actual gameplay. This is NEVER allowed. You must respond as the Gamemaster narrating what actually happens in the story — not as an AI describing what you intend to do. Directly narrate the outcome of the player\'s last action right now. Return a single raw JSON object with fields: "narrative" (full immersive story text, at least 2 sentences), "options" (2–4 choices), "skill_options", "item_options". No meta-commentary, no preamble — raw JSON only.'
+                : 'Your previous response contained a placeholder value ("...") instead of actual content. Write the FULL narrative now. Return a single raw JSON object with fields: "narrative" (full story text, at least 2 sentences), "options" (2–4 choices), "skill_options", "item_options". No placeholders, no abbreviations, no markdown fences.';
+            const retryMsg = await anthropic.messages.create({
+                model: 'claude-sonnet-4-6',
+                max_tokens: 2048,
+                system: systemBlocks,
+                messages: [
+                    ...sanitizedMessages,
+                    {
+                        role: 'user',
+                        content: retryInstruction,
+                    },
+                ],
+            });
+            let retryRaw = '';
+            for (const block of retryMsg.content) {
+                if (block.type === 'text') retryRaw += block.text;
+            }
+            if (retryRaw) {
+                const retried = parseNarrative(retryRaw);
+                if (!isPlaceholderNarrative(retried?.narrative) && !isLoopNarrative(retried?.narrative)) {
+                    structuredResponse = retried;
+                    rawNarrative = retryRaw;
+                }
+            }
+        }
+
+        // ── Ensure options are never empty ────────────────────────────────
+        if (!structuredResponse.options || structuredResponse.options.length === 0) {
+            try {
+                const pendingForFallback = (character.quests ?? [])
+                    .filter(q => q.status === 'active')
+                    .flatMap(q => q.objectives.filter(o => !o.completed).map(o => o.description))
+                    .slice(0, 2);
+                const questContext = pendingForFallback.length > 0
+                    ? `\nActive objectives the player should be working toward: ${pendingForFallback.join('; ')}. At least one option must move the player closer to one of these objectives.`
+                    : '';
+                const optionsCompletion = await openai.chat.completions.create({
+                    model: 'gpt-4o-mini',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: `You are a game master assistant. Given a narrative passage from a text-based RPG, return a JSON array of exactly 3 short action options the player could take next (strings only). The options must be contextually appropriate and varied.${questContext} Return ONLY the raw JSON array, e.g. ["Option A", "Option B", "Option C"].`,
+                        },
+                        { role: 'user', content: structuredResponse.narrative ?? rawNarrative },
+                    ],
+                    max_tokens: 150,
+                });
+                const raw = optionsCompletion.choices[0]?.message?.content?.trim() ?? '';
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    structuredResponse.options = parsed;
+                }
+            } catch {
+                structuredResponse.options = ['Continue forward', 'Look around carefully', 'Wait and observe'];
+            }
+        }
+
+        // ── Ensure at least one option advances a pending quest objective ──
+        const pendingObjectives = (character.quests ?? [])
+            .filter(q => q.status === 'active')
+            .flatMap(q => q.objectives.filter(o => !o.completed).map(o => ({ questTitle: q.title, description: o.description })));
+
+        if (pendingObjectives.length > 0 && structuredResponse.options.length > 0) {
+            // Check if any existing option shares meaningful words with any pending objective
+            const stopWords = new Set(['the', 'a', 'an', 'to', 'of', 'and', 'or', 'in', 'on', 'at', 'for', 'with', 'is', 'it', 'be', 'you']);
+            const optionsText = structuredResponse.options.join(' ').toLowerCase();
+            const hasQuestOption = pendingObjectives.some(obj => {
+                const words = obj.description.toLowerCase().split(/\W+/).filter(w => w.length > 3 && !stopWords.has(w));
+                return words.some(w => optionsText.includes(w));
             });
 
-            rawAssistantContent = followUp.choices[0]?.message?.content ?? '';
+            if (!hasQuestOption) {
+                // Derive a natural-sounding option from the first pending objective.
+                // Objectives are already phrased as concrete actions ("Defeat X", "Return to Y",
+                // "Find Z") so they read well as player choices with minimal transformation.
+                const firstObj = pendingObjectives[0];
+                const questOption = firstObj.description.length <= 60
+                    ? firstObj.description
+                    : firstObj.description.slice(0, 57) + '...';
+
+                if (structuredResponse.options.length >= 4) {
+                    // Replace last option to stay within the 2–4 cap
+                    structuredResponse.options[structuredResponse.options.length - 1] = questOption;
+                } else {
+                    structuredResponse.options.push(questOption);
+                }
+            }
         }
 
-        // Parse structured JSON response from the model
-        let structuredResponse: {
-            narrative: string;
-            options: string[];
-            skill_options: { stat: string; label: string }[];
-            item_options: { item: string; label: string }[];
-        } | null = null;
+        // ── Server-side validation of tool calls ────────────────────────────
+        inventoryChanges = validateInventoryChanges(inventoryChanges, character);
+        currencyDelta = validateCurrencyDelta(currencyDelta, character);
 
-        try {
-            structuredResponse = JSON.parse(rawAssistantContent);
-        } catch {
-            // Fallback: treat raw content as plain narrative
-            structuredResponse = null;
+        // Cap XP gain to a reasonable per-turn maximum (prevents runaway awards)
+        if (xpGain > 0) {
+            const level = character.level ?? 1;
+            const maxXpPerTurn = Math.min(500, 20 + level * 25);
+            xpGain = Math.min(Math.floor(xpGain), maxXpPerTurn);
         }
 
-        // Store only the narrative in session history so the model has clean context
-        const narrativeToStore = structuredResponse?.narrative ?? rawAssistantContent;
-        session!.messages.push({ role: "assistant", content: narrativeToStore });
+        // ── Apply chronicle entry ────────────────────────────────────────────
+        if (pendingChronicleEntry) {
+            const lastEntry = chronicle[chronicle.length - 1];
+            const normalise = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+            const isDuplicate = lastEntry && normalise(lastEntry.entry) === normalise(pendingChronicleEntry.entry);
+            if (!isDuplicate) {
+                const newEntry: ChronicleEntry = {
+                    turn: chronicle.length + 1,
+                    location: pendingChronicleEntry.location,
+                    entry: pendingChronicleEntry.entry,
+                    timestamp: new Date().toISOString(),
+                };
+                chronicle = [...chronicle, newEntry];
+            }
+        }
+
+        // ── Apply world fact changes ─────────────────────────────────────────
+        if (pendingWorldFactChanges.length > 0) {
+            const factsMap: Record<string, string> = Object.fromEntries(worldFacts.map(wf => [wf.id, wf.fact]));
+            for (const change of pendingWorldFactChanges) {
+                if (change.action === 'remove') {
+                    delete factsMap[change.id];
+                } else {
+                    // add or update
+                    if (change.fact) factsMap[change.id] = change.fact;
+                }
+            }
+            worldFacts = Object.entries(factsMap).map(([id, fact]) => ({ id, fact }));
+        }
+
+        // ── Persist chronicle and world facts ───────────────────────────────
+        if (pendingChronicleEntry || pendingWorldFactChanges.length > 0) {
+            const factsRecord = Object.fromEntries(worldFacts.map(wf => [wf.id, wf.fact]));
+            if (isGuest) {
+                const key = String(session!._id);
+                chronicleStore[key] = chronicle;
+                worldFactsStore[key] = factsRecord;
+            } else {
+                await sessionsCollection.updateOne(
+                    { _id: session!._id as ObjectId },
+                    { $set: { chronicle, world_facts: factsRecord } },
+                );
+            }
+        }
+
+        // Store the full JSON in session so options can be restored on reload.
+        // Always stringify the already-parsed structuredResponse — never store raw
+        // model output directly, which may contain literal unescaped newlines.
+        const narrativeToStore = structuredResponse?.narrative ?? rawNarrative;
+        const contentToStore = JSON.stringify(structuredResponse ?? { narrative: narrativeToStore, options: [], skill_options: [], item_options: [] });
+        session!.messages.push({ role: "assistant", content: contentToStore });
 
         // Persist session
         if (isGuest) {
             chatHistoryStore[String(session!._id)] = session!.messages;
         } else {
-            await sessionsCollection.updateOne({ _id: session!._id }, { $set: { messages: session!.messages } });
+            await sessionsCollection.updateOne({ _id: session!._id as ObjectId }, { $set: { messages: session!.messages, last_played: new Date() } });
         }
 
         return NextResponse.json({
-            completion,
             assistantMessage: narrativeToStore,
             structuredResponse,
             gameId: newGameId,
             inventoryChanges,
             currencyDelta,
             questChanges,
+            xpGain,
+            chronicleEntries: chronicle,
+            worldFacts,
         });
     } else {
-        // If no message is provided, return a success response indicating the chat is ready
-        // Also pass back all messages in the session that were from assistant and user
         const filteredMessages = session!.messages.filter(msg => msg.role === "assistant" || msg.role === "user");
-        return NextResponse.json({ status: "Chat initialized and ready for messages.", gameId: newGameId || session._id, messages: filteredMessages });
+        // Parse the last assistant message to restore options on reload
+        let lastStructuredResponse = null;
+        for (let i = filteredMessages.length - 1; i >= 0; i--) {
+            if (filteredMessages[i].role === 'assistant') {
+                const raw = filteredMessages[i].content;
+                // Try plain parse first, then sanitized (legacy sessions may have literal newlines)
+                let parsed: Record<string, unknown> | null = null;
+                try { parsed = JSON.parse(raw); } catch {
+                    try { parsed = JSON.parse(fixLiteralNewlines(raw)); } catch { /* plain text */ }
+                }
+                if (parsed?.narrative) lastStructuredResponse = parsed;
+                break;
+            }
+        }
+        return NextResponse.json({ status: "Chat initialized and ready for messages.", gameId: newGameId || session!._id, messages: filteredMessages, lastStructuredResponse, chronicleEntries: chronicle, worldFacts });
     }
 }

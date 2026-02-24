@@ -1,6 +1,6 @@
 import { AuthOptions, getServerSession } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { MongoClient } from "mongodb";
+import { getDb } from "@/lib/mongodb";
 
 declare module "next-auth" {
   interface Session {
@@ -36,14 +36,11 @@ const authOptions: AuthOptions = {
   ],
   callbacks: {
     async signIn({ user }) {
-      const client = await MongoClient.connect(process.env.MONGODB_URI as string);
-      const db = client.db('dev');
+      const db = await getDb();
 
-      // Check if the user exists in the database using their Google ID
       const existingUser = await db.collection('users').findOne({ googleId: user.id });
 
       if (!existingUser) {
-        // If no user is found, create a new user in the database
         await db.collection('users').insertOne({
           googleId: user.id,
           email: user.email,
@@ -58,24 +55,18 @@ const authOptions: AuthOptions = {
           votes: []
         });
       } else {
-        // Update the last login time for existing users
         await db.collection('users').updateOne(
           { googleId: user.id },
           { $set: { lastLogin: new Date() } }
         );
       }
 
-      client.close();
       return true;
     },
     async session({ session, token }) {
-      const client = await MongoClient.connect(process.env.MONGODB_URI as string);
-      const db = client.db('dev');
+      const db = await getDb();
 
-      // Fetch the user from the database using the token's user ID
       const dbUser = await db.collection('users').findOne({ googleId: token.sub });
-
-      client.close();
 
       if (dbUser) {
         session.user = {

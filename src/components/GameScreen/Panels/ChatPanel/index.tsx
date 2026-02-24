@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Message, InventoryChange } from '@/types';
 import Markdown from 'marked-react';
 import { motion } from 'framer-motion';
+import { BookOpen } from 'lucide-react';
 import { useGameContext } from '@/context/gameContext';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import JournalModal from '@/components/GameScreen/Modals/JournalModal';
 
 // Custom renderer for GM narrative — breaks the wall of text into readable chunks
 const gmRenderer = {
@@ -27,6 +29,16 @@ const gmRenderer = {
     listItem(children: React.ReactNode) {
         return <li className="leading-relaxed">{children}</li>;
     },
+    code(children: React.ReactNode) {
+        return (
+            <pre className="my-2 overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                <code>{children}</code>
+            </pre>
+        );
+    },
+    codespan(children: React.ReactNode) {
+        return <code className="rounded bg-white/10 px-1 py-0.5 text-xs text-amber-200/80">{children}</code>;
+    },
 };
 
 interface ChatPanelProps {
@@ -39,12 +51,14 @@ interface ChatPanelProps {
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input, setInput, handleSend, inputRef}) => {
-    const { character, gameId, setting } = useGameContext();
+    const { character, gameId, setting, chronicle, worldFacts } = useGameContext();
     const [latestGamemasterIndex, setLatestGamemasterIndex] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isJournalOpen, setIsJournalOpen] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const latestGMRef = useRef<HTMLDivElement>(null);
+    const prevMessageCountRef = useRef<number>(0);
 
     useEffect(() => {
         const lastIndex = messages.map((message, index) => ({ message, index }))
@@ -70,16 +84,26 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
         if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     }, [isLoading]);
 
-    // Scroll so the latest GM message sits at the top of the chat window
+    // Scroll so the latest GM message sits at the top — unless this is a bulk
+    // session load (messages jumped by more than 1), in which case scroll to bottom.
     useEffect(() => {
         if (latestGamemasterIndex === null) return;
-        // Double-rAF: first frame commits the DOM, second frame has completed layout
+        const prev = prevMessageCountRef.current;
+        prevMessageCountRef.current = messages.length;
+        const isBulkLoad = messages.length - prev > 1;
+
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 const container = messagesContainerRef.current;
+                if (!container) return;
+
+                if (isBulkLoad) {
+                    container.scrollTo({ top: container.scrollHeight, behavior: 'instant' });
+                    return;
+                }
+
                 const gmMsg = latestGMRef.current;
-                if (container && gmMsg) {
-                    // Use getBoundingClientRect for reliable offset regardless of positioning context
+                if (gmMsg) {
                     const gmRect = gmMsg.getBoundingClientRect();
                     const containerRect = container.getBoundingClientRect();
                     const offset = gmRect.top - containerRect.top + container.scrollTop;
@@ -99,7 +123,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
     };
 
     const sessionCode = gameId ? gameId.slice(-6).toUpperCase() : null;
-    const panelClassName = "flex h-[calc(100vh-10rem)] min-h-0 flex-col rounded-[32px] border border-white/10 bg-[rgba(22,22,24,0.97)] text-white shadow-[0_35px_120px_rgba(5,6,12,0.65)]";
+    const panelClassName = "flex h-full min-h-0 flex-col rounded-[32px] border border-white/10 bg-[var(--panel)] text-white shadow-[0_35px_120px_rgba(5,6,12,0.65)]";
 
     const renderSkeleton = () => (
         <>
@@ -131,6 +155,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
 
     return (
         <div className={panelClassName}>
+            <JournalModal
+                isOpen={isJournalOpen}
+                onClose={() => setIsJournalOpen(false)}
+                chronicle={chronicle}
+                worldFacts={worldFacts}
+            />
             <div className="border-b border-white/5 px-6 py-5">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
@@ -139,9 +169,25 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                             {setting ? setting.name : 'Waiting for world selection'}
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.35em] text-white/60">
-                        <span className={`h-2 w-2 rounded-full ${gameId ? 'bg-emerald-400 animate-pulse' : 'bg-white/30'}`} />
-                        {gameId ? 'Live' : 'Standby'}
+                    <div className="flex items-center gap-3">
+                        {/* Journal button */}
+                        <button
+                            onClick={() => setIsJournalOpen(true)}
+                            title="Open Adventure Journal"
+                            className="flex items-center gap-1.5 rounded-xl border border-amber-400/20 bg-amber-400/8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.3em] text-amber-300/70 transition hover:border-amber-400/40 hover:bg-amber-400/15 hover:text-amber-200"
+                        >
+                            <BookOpen size={11} />
+                            <span>Journal</span>
+                            {chronicle.length > 0 && (
+                                <span className="rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[8px] font-bold text-amber-300/80">
+                                    {chronicle.length}
+                                </span>
+                            )}
+                        </button>
+                        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.35em] text-white/60">
+                            <span className={`h-2 w-2 rounded-full ${gameId ? 'bg-emerald-400 animate-pulse' : 'bg-white/30'}`} />
+                            {gameId ? 'Live' : 'Standby'}
+                        </div>
                     </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/55">
@@ -171,7 +217,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                             const skillMatch = message.text.match(/^\[SKILL:\s*([^\]]+)\]\s*(.+)/i);
                             const itemMatch  = message.text.match(/^\[ITEM:\s*([^\]]+)\]\s*(.+)/i);
 
-                            const bubbleClass = 'rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-950/40 via-white/3 to-transparent px-4 py-2.5 shadow shadow-rose-950/20';
+                            const bubbleClass = 'rounded-2xl border border-[var(--accent)]/20 px-4 py-2.5 shadow shadow-[var(--glow)]/10';
+                            const bubbleStyle: React.CSSProperties = { background: 'var(--theme-player-bubble)' };
 
                             if (skillMatch) {
                                 const [, stat, label] = skillMatch;
@@ -181,8 +228,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                                             <span>🎲</span>
                                             <span>{stat} check</span>
                                         </div>
-                                        <div className={bubbleClass}>
-                                            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300/60">You</div>
+                                        <div className={bubbleClass} style={bubbleStyle}>
+                                            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--accent)', opacity: 0.6 }}>You</div>
                                             <p className="text-xs font-semibold text-white/85">{label}</p>
                                         </div>
                                     </div>
@@ -197,8 +244,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                                             <span>✦</span>
                                             <span>{item}</span>
                                         </div>
-                                        <div className={bubbleClass}>
-                                            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300/60">You</div>
+                                        <div className={bubbleClass} style={bubbleStyle}>
+                                            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--accent)', opacity: 0.6 }}>You</div>
                                             <p className="text-xs font-semibold text-white/85">{label}</p>
                                         </div>
                                     </div>
@@ -207,8 +254,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
 
                             // Plain "You" message
                             return (
-                                <div className={bubbleClass}>
-                                    <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-rose-300/60">You</div>
+                                <div className={bubbleClass} style={bubbleStyle}>
+                                    <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.3em]" style={{ color: 'var(--accent)', opacity: 0.6 }}>You</div>
                                     <div className="text-sm leading-relaxed text-white/85">
                                         <Markdown>{message.text.replace(/\*\*\*\*([^*]+)\*\*\*\*/g, '').replace(/\n/g, '\n\n')}</Markdown>
                                     </div>
@@ -219,7 +266,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                             <>
                                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/35">Gamemaster</div>
                                 <div className="text-sm">
-                                    <Markdown renderer={gmRenderer as any}>{message.text.replace(/\*\*\*\*([^*]+)\*\*\*\*/g, '').trim()}</Markdown>
+                                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                    <Markdown renderer={gmRenderer}>{message.text.replace(/\*\*\*\*([^*]+)\*\*\*\*/g, '').trim()}</Markdown>
                                 </div>
                                 {(() => {
                                     // Use structured options when available (new sessions);
@@ -237,18 +285,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
 
                                     if (hasStructured) {
                                         parsed = [
-                                            ...(message.options ?? []).map(label => ({
+                                            ...(Array.isArray(message.options) ? message.options : []).map(label => ({
                                                 type: 'normal' as const,
                                                 label,
                                                 raw: label,
                                             })),
-                                            ...(message.skill_options ?? []).map(o => ({
+                                            ...(Array.isArray(message.skill_options) ? message.skill_options : []).map(o => ({
                                                 type: 'skill' as const,
                                                 stat: o.stat,
                                                 label: o.label,
                                                 raw: `[SKILL: ${o.stat}] ${o.label}`,
                                             })),
-                                            ...(message.item_options ?? []).map(o => ({
+                                            ...(Array.isArray(message.item_options) ? message.item_options : []).map(o => ({
                                                 type: 'item' as const,
                                                 item: o.item,
                                                 label: o.label,
@@ -276,7 +324,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                                     return (
                                         <div className="mt-4 border-t border-white/8 pt-3">
                                             <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.4em] text-white/30">Choose an action</p>
-                                            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+                                            <div className="grid gap-2 items-stretch" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
                                                 {parsed.map((opt, i) => {
                                                     if (opt.type === 'skill') {
                                                         const statKey = opt.stat.toLowerCase();
@@ -285,27 +333,27 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                                                         const isDisabled = !active || !hasStatMet;
                                                         const tooltipText = !active ? null : !hasStatMet ? `Requires ${opt.stat} 10+ (yours: ${statValue})` : null;
                                                         return (
-                                                            <div key={i} className="group relative">
+                                                            <div key={i} className="group relative h-full">
                                                                 <button
                                                                     onClick={() => handleSendOption(opt.raw)}
                                                                     disabled={isDisabled}
-                                                                    className={`w-full flex flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-center text-xs font-semibold leading-snug transition ${
+                                                                    className={`h-full w-full flex flex-col items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-center text-xs font-semibold leading-snug transition ${
                                                                         isDisabled
                                                                             ? 'cursor-not-allowed border-white/10 bg-white/3 text-white/35'
-                                                                            : 'border-cyan-400/30 bg-cyan-400/5 text-white/90 hover:border-cyan-400/60 hover:bg-cyan-400/10 hover:text-white'
+                                                                            : 'border-[var(--accent)]/30 bg-[var(--accent)]/8 text-white/90 hover:border-[var(--accent)]/60 hover:bg-[var(--accent)]/15 hover:text-white'
                                                                     }`}
                                                                 >
                                                                     <span className={`rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
-                                                                        isDisabled ? 'bg-white/10 text-white/30' : 'bg-cyan-400/20 text-cyan-300'
+                                                                        isDisabled ? 'bg-white/10 text-white/30' : 'bg-[var(--accent)]/20 text-[var(--accent-strong)]'
                                                                     }`}>
                                                                         🎲 {opt.stat} check
                                                                     </span>
                                                                     <span>{opt.label}</span>
                                                                 </button>
                                                                 {tooltipText && (
-                                                                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[200px] -translate-x-1/2 rounded-lg bg-[#1a1a1e] px-3 py-1.5 text-center text-[10px] font-medium text-white/80 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                                                                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[200px] -translate-x-1/2 rounded-lg bg-[var(--elevated)] px-3 py-1.5 text-center text-[10px] font-medium text-white/80 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
                                                                         {tooltipText}
-                                                                        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[#1a1a1e]" />
+                                                                        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[var(--elevated)]" />
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -318,27 +366,27 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                                                         const isDisabled = !active || !hasItem;
                                                         const tooltipText = !active ? null : !hasItem ? `You don't have ${opt.item}` : null;
                                                         return (
-                                                            <div key={i} className="group relative">
+                                                            <div key={i} className="group relative h-full">
                                                                 <button
                                                                     onClick={() => handleSendOption(opt.raw)}
                                                                     disabled={isDisabled}
-                                                                    className={`w-full flex flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-center text-xs font-semibold leading-snug transition ${
+                                                                    className={`h-full w-full flex flex-col items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-center text-xs font-semibold leading-snug transition ${
                                                                         isDisabled
                                                                             ? 'cursor-not-allowed border-white/10 bg-white/3 text-white/35'
-                                                                            : 'border-amber-400/40 bg-amber-400/5 text-white/90 hover:border-amber-400/70 hover:bg-amber-400/10 hover:text-white'
+                                                                            : 'border-[var(--accent)]/30 bg-[var(--accent)]/8 text-white/90 hover:border-[var(--accent)]/60 hover:bg-[var(--accent)]/15 hover:text-white'
                                                                     }`}
                                                                 >
                                                                     <span className={`rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${
-                                                                        isDisabled ? 'bg-white/10 text-white/30' : 'bg-amber-400/20 text-amber-300'
+                                                                        isDisabled ? 'bg-white/10 text-white/30' : 'bg-[var(--accent)]/20 text-[var(--accent-strong)]'
                                                                     }`}>
                                                                         ✦ {opt.item}
                                                                     </span>
                                                                     <span>{opt.label}</span>
                                                                 </button>
                                                                 {tooltipText && (
-                                                                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[200px] -translate-x-1/2 rounded-lg bg-[#1a1a1e] px-3 py-1.5 text-center text-[10px] font-medium text-white/80 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                                                                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[200px] -translate-x-1/2 rounded-lg bg-[var(--elevated)] px-3 py-1.5 text-center text-[10px] font-medium text-white/80 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
                                                                         {tooltipText}
-                                                                        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[#1a1a1e]" />
+                                                                        <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[var(--elevated)]" />
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -352,8 +400,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                                                             className={`rounded-xl border px-4 py-2.5 text-center text-xs font-semibold leading-snug transition ${
                                                                 !active
                                                                     ? 'cursor-not-allowed border-white/10 bg-white/3 text-white/35'
-                                                                    : 'border-rose-700/40 bg-gradient-to-r from-rose-600/70 via-amber-600/60 to-red-800/70 text-white/90 shadow shadow-rose-950/30 hover:from-rose-600/90 hover:via-amber-600/80 hover:to-red-800/90 hover:text-white'
+                                                                    : 'border-[var(--accent)]/30 text-white/90 shadow shadow-black/20 hover:brightness-110 hover:text-white'
                                                             }`}
+                                                            style={active ? { background: 'var(--theme-btn)' } : undefined}
                                                         >
                                                             {opt.label}
                                                         </button>
@@ -395,56 +444,31 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                     </motion.div>
                 ))}
                 {isLoading && (
-                    <div className="loading-indicator mt-4 text-center text-sm text-white/70">
-                        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-rose-400" />
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="mt-2 text-rose-200"
-                        >
-                            Generating response
-                            <motion.span
-                                className="animate-pulse"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{
-                                    repeat: Infinity,
-                                    repeatType: "loop",
-                                    duration: 1,
-                                    times: [0, 0.33, 0.66, 1],
-                                }}
-                            >
-                                .
-                            </motion.span>
-                            <motion.span
-                                className="animate-pulse"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{
-                                    repeat: Infinity,
-                                    repeatType: "loop",
-                                    duration: 1,
-                                    times: [0.33, 0.66, 1, 1.33],
-                                }}
-                            >
-                                .
-                            </motion.span>
-                            <motion.span
-                                className="animate-pulse"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{
-                                    repeat: Infinity,
-                                    repeatType: "loop",
-                                    duration: 1,
-                                    times: [0.66, 1, 1.33, 1.66],
-                                }}
-                            >
-                                .
-                            </motion.span>
-                        </motion.div>
-                    </div>
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="mr-auto max-w-[90%]"
+                    >
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/35">Gamemaster</div>
+                        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/8 via-white/4 to-transparent px-4 py-3 shadow">
+                            <div className="flex items-center gap-1.5 py-0.5">
+                                {[0, 0.2, 0.4].map((delay) => (
+                                    <motion.span
+                                        key={delay}
+                                        className="h-2 w-2 rounded-full bg-white/40"
+                                        animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                                        transition={{
+                                            duration: 0.9,
+                                            repeat: Infinity,
+                                            ease: 'easeInOut',
+                                            delay,
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </motion.div>
                 )}
                 <div ref={messagesEndRef} />
             </div>
@@ -453,12 +477,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                     <button
                         onClick={handleSendWithStart}
                         disabled={!character || !character._id || isLoading}
+                        style={(!character || !character._id || isLoading) ? undefined : { background: 'var(--theme-btn)' }}
                         className={`w-full rounded-2xl px-6 py-4 text-sm font-semibold transition ${
                             !character || !character._id
                                 ? 'cursor-not-allowed border border-white/10 bg-white/5 text-white/40'
                                 : isLoading
                                     ? 'cursor-wait border border-white/15 bg-white/5 text-white/70'
-                                    : 'bg-gradient-to-r from-rose-400 via-amber-600 to-red-800 text-white shadow-lg'
+                                    : 'text-white shadow-lg'
                         }`}
                     >
                         {isLoading ? (
@@ -479,27 +504,26 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, handleSendOption, input
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                            placeholder="Type a message..."
-                            className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/60"
+                            onKeyDown={(e) => e.key === "Enter" && !isLoading && handleSend()}
+                            placeholder={isLoading ? "Waiting for response..." : "Type a message..."}
+                            disabled={isLoading}
+                            className={`flex-1 rounded-2xl border px-4 py-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/60 transition ${
+                                isLoading
+                                    ? 'cursor-not-allowed border-white/5 bg-white/3 text-white/30'
+                                    : 'border-white/10 bg-white/5'
+                            }`}
                         />
                         <button
                             onClick={handleSend}
                             disabled={isLoading || !input.trim()}
+                            style={(!isLoading && input.trim()) ? { background: 'var(--theme-btn)' } : undefined}
                             className={`rounded-2xl px-5 py-3 text-sm font-semibold shadow transition ${
                                 isLoading || !input.trim()
                                     ? 'cursor-not-allowed border border-white/10 bg-white/5 text-white/50'
-                                    : 'bg-gradient-to-r from-rose-400 via-amber-600 to-red-800 text-white hover:opacity-95'
+                                    : 'text-white hover:opacity-95'
                             }`}
                         >
-                            {isLoading ? (
-                                <span className="flex items-center gap-2">
-                                    <LoadingSpinner size={16} className="text-white" label="Sending" />
-                                    <span>Sending</span>
-                                </span>
-                            ) : (
-                                'Send'
-                            )}
+                            Send
                         </button>
                     </div>
                 </div>
